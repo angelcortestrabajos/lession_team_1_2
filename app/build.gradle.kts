@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("org.jetbrains.kotlin.android")
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
@@ -36,6 +37,12 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 

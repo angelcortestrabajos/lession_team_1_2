@@ -8,7 +8,7 @@ lifecycleRuntimeKtx = "2.8.7"
 lifecycleViewmodelCompose = "2.8.7"
 activityCompose = "1.9.3"
 activityKtx = "1.9.3"
-kotlin = "2.0.21"
+kotlin = "2.3.21"
 kotlinxSerialization = "1.7.3"
 composeBom = "2026.02.01"
 firebaseBom = "34.19.0"
@@ -18,7 +18,7 @@ credentialManager = "1.3.0"
 googleid = "1.1.1"
 datastore = "1.2.1"
 room = "2.8.5"
-ksp = "2.0.21-1.0.28"
+ksp = "2.3.12"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
