@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Funciones Auxiliares de Autenticación y Autorización
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ===============================================================
+    // Validadores de Dominio y Negocio
+    // ===============================================================
+
+    function isValidBiometricRecord(data) {
+      return data.heart_rate is number
+        && data.heart_rate >= 0
+        && data.fatigue is number
+        && data.fatigue >= 0
+        && data.fatigue <= 100
+        && (!('max_muscle' in data) || (data.max_muscle is number && data.max_muscle >= 0 && data.max_muscle <= 100))
+        && (!('stability' in data) || (data.stability is number && data.stability >= 0 && data.stability <= 100))
+        && (!('risk_level' in data) || (data.risk_level is number && data.risk_level >= 0 && data.risk_level <= 100))
+        && data.timestamp is timestamp;
+    }
+
+    function isValidTodo(data) {
+      return data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 200
+        && data.is_done is bool
+        && data.created_at is timestamp;
+    }
+
+    // ===============================================================
+    // Colección Principal: users
+    // ===============================================================
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+        && request.resource.data.email is string
+        && request.resource.data.display_name is string
+        && request.resource.data.created_at is timestamp;
+
+      allow update: if isOwner(userId)
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.created_at == resource.data.created_at;
+
+      allow delete: if isOwner(userId);
+
+      match /biometric_history/{recordId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidBiometricRecord(request.resource.data);
+        allow update: if isOwner(userId) && isValidBiometricRecord(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /todos/{todoId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidTodo(request.resource.data);
+        allow update: if isOwner(userId) && isValidTodo(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
