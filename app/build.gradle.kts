@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.example.lession_equipo1"
     compileSdk = 35
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.example.lession_equipo1"
