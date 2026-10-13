@@ -265,9 +265,7 @@ fun ProfileScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         ProfileSectionTitle("Preferencias")
-        ProfileOptionItem("Notificaciones", Icons.Default.Notifications)
         ProfileOptionItem("Unidades (Métrico)", Icons.Default.Straighten)
-        ProfileOptionItem("Idioma", Icons.Default.Language)
 
         Spacer(modifier = Modifier.height(32.dp))
 
