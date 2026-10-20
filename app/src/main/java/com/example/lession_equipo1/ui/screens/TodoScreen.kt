@@ -10,7 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.lession_equipo1.model.TodoItem
-import com.example.lession_equipo1.supabase
+import com.example.lession_equipo1.network.SupabaseClient
 import com.example.lession_equipo1.ui.LocalAppColors
 import com.example.lession_equipo1.ui.LocalStrings
 import io.github.jan.supabase.postgrest.from
@@ -28,7 +28,7 @@ fun TodoScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             try {
-                items = supabase.from("todos")
+                items = SupabaseClient.client.from("todos")
                     .select().decodeList<TodoItem>()
             } catch (e: Exception) {
                 e.printStackTrace()

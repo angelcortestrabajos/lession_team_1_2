@@ -66,6 +66,9 @@ class AuthViewModel(
         viewModelScope.launch {
             _state.value = AuthState.Loading
             try {
+                require(email.isNotBlank()) { "El email es obligatorio." }
+                require(pass.isNotBlank()) { "La contraseña es obligatoria." }
+
                 authRepository.signInWithEmail(email, pass)
                 _state.value = AuthState.Success
             } catch (e: Exception) {
@@ -75,13 +78,17 @@ class AuthViewModel(
     }
 
     fun registerWithEmail(
-        email: String, 
-        pass: String, 
+        email: String,
+        pass: String,
         name: String
     ) {
         viewModelScope.launch {
             _state.value = AuthState.Loading
             try {
+                require(email.isNotBlank()) { "El email es obligatorio." }
+                require(pass.length >= 6) { "La contraseña debe tener al menos 6 caracteres." }
+                require(name.isNotBlank()) { "El nombre es obligatorio." }
+
                 authRepository.signUpWithEmail(email, pass, name)
                 _state.value = AuthState.VerificationEmailSent
                 _notifications.emit("Verifica tu identidad: Hemos enviado un enlace de confirmación a tu correo.")

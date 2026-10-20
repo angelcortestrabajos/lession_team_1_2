@@ -3,6 +3,7 @@ package com.example.lession_equipo1.repository
 import android.content.Context
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
+import com.example.lession_equipo1.BuildConfig
 import com.example.lession_equipo1.model.AppUser
 import com.example.lession_equipo1.network.SupabaseClient
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -99,9 +100,11 @@ class AuthRepository(context: Context) {
     }
 
     suspend fun signInWithGoogle(token: String) {
+        require(token.isNotBlank()) { "El token de Google es inválido." }
+
         val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(token, null)
         firebaseAuth.signInWithCredential(credential).await()
-        
+
         try {
             supabaseClient.auth.signInWith(IDToken) {
                 idToken = token
@@ -111,10 +114,14 @@ class AuthRepository(context: Context) {
     }
 
     suspend fun signInWithEmail(email: String, pass: String) {
-        firebaseAuth.signInWithEmailAndPassword(email, pass).await()
+        val normalizedEmail = email.trim()
+        require(normalizedEmail.isNotBlank()) { "El email es obligatorio." }
+        require(pass.isNotBlank()) { "La contraseña es obligatoria." }
+
+        firebaseAuth.signInWithEmailAndPassword(normalizedEmail, pass).await()
         try {
             supabaseClient.auth.signInWith(io.github.jan.supabase.auth.providers.builtin.Email) {
-                this.email = email
+                this.email = normalizedEmail
                 this.password = pass
             }
         } catch (e: Exception) { e.printStackTrace() }
@@ -129,9 +136,20 @@ class AuthRepository(context: Context) {
     }
 
     suspend fun signUpWithEmail(email: String, pass: String, fullName: String) {
-        val result = firebaseAuth.createUserWithEmailAndPassword(email, pass).await()
-        val profileUpdates = com.google.firebase.auth.userProfileChangeRequest { displayName = fullName }
+        val normalizedEmail = email.trim()
+        val normalizedName = fullName.trim()
+        require(normalizedEmail.isNotBlank()) { "El email es obligatorio." }
+        require(pass.length >= 6) { "La contraseña debe tener al menos 6 caracteres." }
+        require(normalizedName.isNotBlank()) { "El nombre es obligatorio." }
+
+        val result = firebaseAuth.createUserWithEmailAndPassword(normalizedEmail, pass).await()
+        val profileUpdates = com.google.firebase.auth.userProfileChangeRequest { displayName = normalizedName }
         result.user?.updateProfile(profileUpdates)?.await()
+        try {
+            result.user?.sendEmailVerification()?.await()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     suspend fun updateBodyData(age: Int, weight: Double, height: Double, gender: String, sport: String) {
@@ -221,9 +239,10 @@ class AuthRepository(context: Context) {
     }
 
     fun getGoogleIdOption(): GetGoogleIdOption {
+        val clientId = BuildConfig.GOOGLE_WEB_CLIENT_ID
         return GetGoogleIdOption.Builder()
             .setFilterByAuthorizedAccounts(false)
-            .setServerClientId("REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com")
+            .setServerClientId(clientId)
             .setAutoSelectEnabled(true)
             .build()
     }

@@ -33,7 +33,12 @@ class ViewModelFactory(context: Context) : ViewModelProvider.Factory {
                 AuthViewModel(authRepository, firestoreRepository) as T
             }
             modelClass.isAssignableFrom(BiometricViewModel::class.java) -> {
-                BiometricViewModel(firestoreRepository, bluetoothController, roomHistoryRepository) as T
+                BiometricViewModel(
+                    firestoreRepository,
+                    bluetoothController,
+                    roomHistoryRepository,
+                    userPreferencesRepository
+                ) as T
             }
             modelClass.isAssignableFrom(HistoryViewModel::class.java) -> {
                 HistoryViewModel(firestoreRepository, roomHistoryRepository) as T

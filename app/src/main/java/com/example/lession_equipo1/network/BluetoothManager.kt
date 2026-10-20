@@ -1,24 +1,20 @@
 package com.example.lession_equipo1.network
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
-import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanResult
+import android.bluetooth.BluetoothManager as AndroidBluetoothManager
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.content.ContextCompat
+import com.example.lession_equipo1.data.ble.BleConnectionState
+import com.example.lession_equipo1.data.ble.BluetoothManager as BleDataStoreManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.UUID
+import kotlinx.coroutines.launch
 
 sealed class BluetoothState {
     object Idle : BluetoothState()
@@ -29,154 +25,123 @@ sealed class BluetoothState {
     data class Error(val message: String) : BluetoothState()
 }
 
+data class DiscoveredBluetoothDevice(
+    val device: BluetoothDevice,
+    val name: String,
+    val isEmgSensor: Boolean
+)
+
 class BluetoothController(private val context: Context) {
 
-    private val bluetoothManager: BluetoothManager? =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    private val adapter: BluetoothAdapter? = bluetoothManager?.adapter
+    private val bleManager = BleDataStoreManager(context.applicationContext)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val bluetoothAdapter: BluetoothAdapter? =
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? AndroidBluetoothManager)?.adapter
 
     private val _state = MutableStateFlow<BluetoothState>(BluetoothState.Idle)
-    val state = _state.asStateFlow()
+    val state: StateFlow<BluetoothState> = _state.asStateFlow()
 
-    private val _scannedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
-    val scannedDevices = _scannedDevices.asStateFlow()
+    private val _scannedDevices = MutableStateFlow<List<DiscoveredBluetoothDevice>>(emptyList())
+    val scannedDevices: StateFlow<List<DiscoveredBluetoothDevice>> = _scannedDevices.asStateFlow()
 
     private val _connectedDevice = MutableStateFlow<BluetoothDevice?>(null)
-    val connectedDevice = _connectedDevice.asStateFlow()
+    val connectedDevice: StateFlow<BluetoothDevice?> = _connectedDevice.asStateFlow()
 
-    private val _receivedData = MutableStateFlow("")
-    val receivedData = _receivedData.asStateFlow()
+    val receivedData: StateFlow<String> = bleManager.receivedData
+    val parsedHeartRate: StateFlow<Int?> = bleManager.parsedHeartRate
+    val parsedBatteryLevel: StateFlow<Int?> = bleManager.parsedBatteryLevel
+    val parsedEmgMv: StateFlow<Float?> = bleManager.parsedEmgMv
+    val parsedEmgAdc: StateFlow<Int?> = bleManager.parsedEmgAdc
+    val emgSamples = bleManager.emgSamples
+    val emgSampleSequence = bleManager.emgSampleSequence
+    val supportsEmgCommands = bleManager.supportsEmgCommands
+    val commandError = bleManager.commandError
 
-    private var gatt: BluetoothGatt? = null
-
-    private val scanCallback = object : ScanCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val device = result.device
-            if (device != null) {
-                val currentList = _scannedDevices.value
-                if (currentList.none { it.address == device.address }) {
-                    _scannedDevices.value = currentList + device
+    init {
+        scope.launch {
+            bleManager.connectionState.collect { connectionState ->
+                when (connectionState) {
+                    is BleConnectionState.Disconnected -> {
+                        _state.value = BluetoothState.Idle
+                        _connectedDevice.value = null
+                    }
+                    is BleConnectionState.Scanning -> _state.value = BluetoothState.Scanning
+                    is BleConnectionState.Connecting -> _state.value = BluetoothState.Connecting
+                    is BleConnectionState.Connected -> {
+                        _state.value = BluetoothState.Connected
+                        if (bluetoothAdapter != null && connectionState.deviceAddress.isNotEmpty()) {
+                            try {
+                                _connectedDevice.value = bluetoothAdapter.getRemoteDevice(connectionState.deviceAddress)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }
+                    is BleConnectionState.Reconnecting -> _state.value = BluetoothState.Connecting
+                    is BleConnectionState.Error -> _state.value = BluetoothState.Error(connectionState.message)
                 }
-                _state.value = BluetoothState.DeviceFound(device)
             }
         }
 
-        override fun onScanFailed(errorCode: Int) {
-            _state.value = BluetoothState.Error("Error al escanear (Código $errorCode)")
+        scope.launch {
+            bleManager.scannedDevices.collect { scannedList ->
+                if (bluetoothAdapter != null) {
+                    val devices = scannedList.mapNotNull { scanned ->
+                        try {
+                            DiscoveredBluetoothDevice(
+                                device = bluetoothAdapter.getRemoteDevice(scanned.address),
+                                name = scanned.name,
+                                isEmgSensor = scanned.isEmgSensor
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    _scannedDevices.value = devices
+                }
+            }
         }
     }
 
-    @SuppressLint("MissingPermission")
-    fun startScan() {
-        if (adapter == null) {
-            _state.value = BluetoothState.Error("El dispositivo no tiene soporte para Bluetooth")
-            return
-        }
-        if (!adapter.isEnabled) {
-            _state.value = BluetoothState.Error("El Bluetooth está desactivado. Por favor, actívalo.")
-            return
-        }
-        if (!hasPermissions()) {
-            _state.value = BluetoothState.Error("Permisos de Bluetooth faltantes")
-            return
-        }
+    fun isBluetoothEnabled(): Boolean {
+        return bluetoothAdapter?.isEnabled == true
+    }
 
-        _scannedDevices.value = emptyList()
-        _state.value = BluetoothState.Scanning
-        adapter.bluetoothLeScanner?.startScan(scanCallback)
+    @SuppressLint("MissingPermission")
+    fun startScan(timeoutMs: Long = 15000L) {
+        bleManager.startScan()
     }
 
     @SuppressLint("MissingPermission")
     fun stopScan() {
-        adapter?.bluetoothLeScanner?.stopScan(scanCallback)
-        if ((_state.value is BluetoothState.Scanning) || (_state.value is BluetoothState.DeviceFound)) {
-            _state.value = BluetoothState.Idle
-        }
+        bleManager.stopScan()
     }
 
     @SuppressLint("MissingPermission")
     fun connectToDevice(device: BluetoothDevice) {
-        stopScan()
-        _connectedDevice.value = device
-        _state.value = BluetoothState.Connecting
-        @Suppress("DEPRECATION")
-        gatt = device.connectGatt(context, false, gattCallback)
+        bleManager.connect(device.address)
     }
 
-    private val gattCallback = object : BluetoothGattCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                _state.value = BluetoothState.Connected
-                gatt.discoverServices()
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                _state.value = BluetoothState.Idle
-                _connectedDevice.value = null
-                gatt.close()
-                this@BluetoothController.gatt = null
-            }
-        }
+    fun connect(address: String) {
+        bleManager.connect(address)
+    }
 
-        @SuppressLint("MissingPermission")
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                // Habilitar notificaciones para características con soporte
-                for (service in gatt.services) {
-                    for (characteristic in service.characteristics) {
-                        val properties = characteristic.properties
-                        if ((properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0 ||
-                            (properties and BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
-                        ) {
-                            gatt.setCharacteristicNotification(characteristic, true)
-                            val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-                            val descriptor = characteristic.getDescriptor(cccdUuid)
-                            if (descriptor != null) {
-                                @Suppress("DEPRECATION")
-                                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                                @Suppress("DEPRECATION")
-                                gatt.writeDescriptor(descriptor)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        @Deprecated("Deprecated in Java")
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-        ) {
-            @Suppress("DEPRECATION")
-            val dataBytes = characteristic.value
-            val dataStr = dataBytes?.decodeToString() ?: ""
-            _receivedData.value = dataStr
-        }
+    fun sendCommand(command: String) {
+        bleManager.sendCommand(command)
     }
 
     fun hasPermissions(): Boolean {
-        val permissions = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        }
-
-        return permissions.all {
-            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
-        }
+        return bleManager.hasPermissions()
     }
 
     @SuppressLint("MissingPermission")
     fun disconnect() {
-        gatt?.disconnect()
-        gatt?.close()
-        gatt = null
-        _connectedDevice.value = null
-        _state.value = BluetoothState.Idle
+        bleManager.disconnect()
+    }
+
+    fun close() {
+        disconnect()
+        bleManager.unregisterReceiver()
+        scope.cancel()
     }
 }
-

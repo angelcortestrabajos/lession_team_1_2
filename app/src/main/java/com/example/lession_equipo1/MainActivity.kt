@@ -39,22 +39,19 @@ import com.example.lession_equipo1.ui.*
 import com.example.lession_equipo1.ui.theme.Lession_equipo1Theme
 import com.example.lession_equipo1.viewmodel.*
 import com.example.lession_equipo1.ui.screens.*
-import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.postgrest.Postgrest
-
-val supabase = createSupabaseClient(
-    supabaseUrl = "https://agcnpznjwzsukzvrmvrk.supabase.co",
-    supabaseKey = "sb_publishable_xE2W7YWVEmOF0q_XygMViQ_pReB3oto",
-) {
-    install(Postgrest)
-}
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
+
         setContent {
             Lession_equipo1Theme {
                 val navController = rememberNavController()
@@ -67,7 +64,7 @@ class MainActivity : ComponentActivity() {
                 val goalViewModel: GoalViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
                 val workoutHistoryViewModel: WorkoutHistoryViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
                 val statisticsViewModel: StatisticsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
-                
+
                 val user by authViewModel.currentUser.collectAsState()
                 val isDataMissing = user?.let { (it.weight == 0.0) || (it.height == 0.0) || it.sport.isEmpty() } ?: false
                 val currentUserId = user?.uid ?: ""
@@ -99,7 +96,7 @@ class MainActivity : ComponentActivity() {
                         },
                     ) { innerPadding ->
                         NavHost(
-                            navController = navController, 
+                            navController = navController,
                             startDestination = if (user == null) "login" else "home",
                             modifier = Modifier.padding(innerPadding),
                         ) {
@@ -129,18 +126,18 @@ class MainActivity : ComponentActivity() {
                             composable("home") {
                                 val currentUser = user ?: return@composable
                                 LaunchedEffect(currentUser.uid) {
-                                    biometricViewModel.startSimulation(currentUser.uid)
+                                    biometricViewModel.setCurrentUser(currentUser.uid)
                                 }
-                                
+
                                 // Bridge biometric updates to goals
                                 val currentRisk = biometricViewModel.riskLevel
                                 LaunchedEffect(currentRisk) {
                                     goalViewModel.updateProgress(currentUser.uid, GoalCategory.RISK_CONTROL, currentRisk.toDouble())
                                 }
-                                
+
                                 HomeScreen(
-                                    viewModel = biometricViewModel, 
-                                    authViewModel = authViewModel, 
+                                    viewModel = biometricViewModel,
+                                    authViewModel = authViewModel,
                                     isDataMissing = isDataMissing,
                                     onBluetoothClick = { navController.navigate("bluetooth") },
                                     onCompleteProfileClick = { navController.navigate("body_data") }
@@ -197,7 +194,7 @@ class MainActivity : ComponentActivity() {
                                 val workoutId = backStackEntry.arguments?.getString("workoutId") ?: ""
                                 val history by workoutHistoryViewModel.history.collectAsState()
                                 val workout = history.find { it.id == workoutId }
-                                
+
                                 if (workout != null) {
                                     WorkoutDetailScreen(
                                         workout = workout,
@@ -211,7 +208,7 @@ class MainActivity : ComponentActivity() {
                             }
                             composable("profile") {
                                 ProfileScreen(
-                                    viewModel = biometricViewModel, 
+                                    viewModel = biometricViewModel,
                                     authViewModel = authViewModel,
                                     isDataMissing = isDataMissing,
                                     onSettingsClick = { navController.navigate("settings") },
@@ -224,12 +221,18 @@ class MainActivity : ComponentActivity() {
                                     onBack = { navController.popBackStack() }
                                 )
                             }
-                            composable("settings") { 
-                                SettingsScreen(appConfigViewModel, onBack = { navController.popBackStack() }) 
+                            composable("settings") {
+                                SettingsScreen(
+                                    viewModel = appConfigViewModel,
+                                    biometricViewModel = biometricViewModel,
+                                    userId = currentUserId,
+                                    onBluetoothClick = { navController.navigate("bluetooth") },
+                                    onBack = { navController.popBackStack() }
+                                )
                             }
-                            composable("history") { 
+                            composable("history") {
                                 val u = user ?: return@composable
-                                HistoryScreen(u.uid, historyViewModel, onBack = { navController.popBackStack() }) 
+                                HistoryScreen(u.uid, historyViewModel, onBack = { navController.popBackStack() })
                             }
                             composable("firebase_history") {
                                 val u = user ?: return@composable
@@ -239,11 +242,11 @@ class MainActivity : ComponentActivity() {
                                     onBack = { navController.popBackStack() }
                                 )
                             }
-                            composable("bluetooth") { 
-                                BluetoothScreen(biometricViewModel, onBack = { navController.popBackStack() }) 
+                            composable("bluetooth") {
+                                BluetoothScreen(biometricViewModel, onBack = { navController.popBackStack() })
                             }
-                            composable("forgot_password") { 
-                                ForgotPasswordScreen(authViewModel, onBack = { navController.popBackStack() }) 
+                            composable("forgot_password") {
+                                ForgotPasswordScreen(authViewModel, onBack = { navController.popBackStack() })
                             }
                         }
                     }
@@ -256,18 +259,18 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun NotificationHandler(
-        biometric: BiometricViewModel, 
+        biometric: BiometricViewModel,
         auth: AuthViewModel,
         notificationViewModel: NotificationViewModel,
         goalViewModel: GoalViewModel
     ) {
         LaunchedEffect(biometric.notifications) {
             biometric.notifications.collect { message ->
-                val type = if (message.contains("¡CRÍTICO!") || message.contains("¡RIESGO ALTO!")) 
+                val type = if (message.contains("¡CRÍTICO!") || message.contains("¡RIESGO ALTO!"))
                     NotificationType.RISK else NotificationType.BIOMETRIC
-                val priority = if (type == NotificationType.RISK) 
+                val priority = if (type == NotificationType.RISK)
                     NotificationPriority.CRITICAL else NotificationPriority.HIGH
-                
+
                 notificationViewModel.addNotification(
                     title = if (type == NotificationType.RISK) "Alerta de Riesgo" else "Alerta Biométrica",
                     message = message,
@@ -345,9 +348,9 @@ fun LessionTopBar(
                 Icon(Icons.Default.History, "Historial", tint = colors.text)
             }
             IconButton(onClick = onNotificationsClick) {
-                BadgedBox(badge = { 
+                BadgedBox(badge = {
                     if (unreadCount > 0) {
-                        Badge(containerColor = Color.Red) { Text(unreadCount.toString()) } 
+                        Badge(containerColor = Color.Red) { Text(unreadCount.toString()) }
                     }
                 }) {
                     Icon(Icons.Default.Notifications, "Notificaciones", tint = colors.text)
@@ -373,19 +376,19 @@ fun BottomNavigationBar(navController: NavHostController) {
     val currentRoute = navBackStackEntry?.destination?.route
 
     NavigationBar(
-        containerColor = colors.surface, 
+        containerColor = colors.surface,
         contentColor = colors.accent,
         tonalElevation = 8.dp
     ) {
         items.forEach { (route, label, icon) ->
             val selected = currentRoute == route
             NavigationBarItem(
-                icon = { 
+                icon = {
                     Icon(
-                        icon, 
+                        icon,
                         contentDescription = label,
                         modifier = Modifier.size(24.dp)
-                    ) 
+                    )
                 },
                 label = { Text(label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
                 selected = selected,

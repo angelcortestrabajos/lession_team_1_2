@@ -50,24 +50,17 @@ En Windows, desde la raíz del proyecto:
 
 Los siguientes escenarios están identificados, pero **todavía no se han probado de extremo a extremo**. No marcarlos como aprobados hasta ejecutarlos y registrar evidencia.
 
-| ID | Caso | Pasos resumidos | Resultado esperado | Estado |
-|---|---|---|---|---|
+| ID    | Caso | Pasos resumidos | Resultado esperado | Estado |
+|-------|---|---|---|---|
 | CP-07 | Acceso válido | Ingresar una cuenta de prueba válida y una contraseña correcta. | Se inicia sesión y aparece Inicio. | PENDIENTE: requiere cuenta de prueba. |
 | CP-08 | Acceso inválido | Ingresar una contraseña incorrecta para una cuenta de prueba. | No se inicia sesión y se informa el error. | PENDIENTE: requiere cuenta de prueba. |
 | CP-09 | Registro | Registrar una cuenta de prueba nueva con nombre, correo y contraseña válidos. | Se informa el envío del correo de verificación y no se crea una sesión antes de la verificación. | PENDIENTE: requiere cuenta/correo de prueba. |
-| CP-10 | Acceso de invitado | Usar “Acceso Rápido (Invitado)”. | Se abre Inicio y se pueden consultar las pantallas compatibles con el invitado. | PENDIENTE. |
 | CP-11 | Recuperar contraseña | Abrir “Olvidaste tu contraseña”, enviar un correo de prueba válido y revisar el estado. | La aplicación confirma el envío o muestra el error del servicio. | PENDIENTE: requiere correo de prueba. |
 | CP-12 | Completar datos corporales | Abrir el formulario, enviar datos válidos y luego probar campos vacíos o fuera de rango. | Los datos válidos se guardan y los inválidos reciben una indicación comprensible. | PENDIENTE: requiere una sesión válida. |
 | CP-13 | Editar perfil | Cambiar nombre, edad, peso, altura, género y deporte; guardar y reabrir. | Los datos actualizados se conservan y se ven reflejados en el perfil. | PENDIENTE: requiere una sesión válida. |
 | CP-14 | Señales y estadísticas | Consultar Inicio, Estado e informes; contrastar valores e historial. | Las pantallas cargan sin cierres y muestran datos coherentes. | PENDIENTE: requiere datos de prueba. |
 | CP-15 | Bluetooth con y sin permisos | Denegar y conceder los permisos; repetir con un sensor compatible disponible. | La app gestiona ambos permisos y comunica claramente conexión o falta de dispositivo. | PENDIENTE: requiere dispositivo BLE de prueba. |
-| CP-16 | Crear y consultar objetivos | Crear un objetivo, volver a la lista y abrir un entrenamiento relacionado. | El objetivo aparece y sus datos permanecen disponibles al volver a la pantalla. | PENDIENTE: requiere servicio/datos de prueba. |
-| CP-17 | Historial de entrenamientos | Consultar el historial, abrir un registro y regresar. | Los registros disponibles se muestran y la navegación de detalle funciona. | PENDIENTE: requiere registros de prueba. |
-| CP-18 | Notificaciones | Generar o recibir una alerta y abrir la lista de notificaciones. | La alerta se muestra y se puede marcar como leída cuando corresponda. | PENDIENTE: requiere datos/eventos de prueba. |
-| CP-19 | Tema e idioma | Cambiar cada preferencia desde Configuración y reiniciar la aplicación. | La interfaz cambia y la preferencia se conserva según lo esperado. | PENDIENTE. |
-| CP-20 | Cerrar sesión | Cerrar sesión desde Perfil y reabrir la aplicación. | Se cierra la sesión y se vuelve a la pantalla de acceso. | PENDIENTE: requiere una sesión válida. |
-| CP-21 | Eliminar cuenta | Iniciar el flujo, cancelar la confirmación y luego probar con una cuenta desechable. | Cancelar no elimina la cuenta; confirmar elimina solo la cuenta de prueba. | PENDIENTE: requiere cuenta desechable. |
-| CP-22 | Revisión de permisos | Revisar los permisos Bluetooth, ubicación y notificaciones en Android 12 y una versión reciente. | La aplicación solicita los permisos necesarios en el momento correcto y ofrece alternativas si se deniegan. | PENDIENTE. |
+| CP-19 | Revisión de permisos | Revisar los permisos Bluetooth, ubicación y notificaciones en Android 12 y una versión reciente. | La aplicación solicita los permisos necesarios en el momento correcto y ofrece alternativas si se deniegan. | PENDIENTE. |
 
 ## Resumen y limitaciones
 
@@ -76,3 +69,25 @@ Los siguientes escenarios están identificados, pero **todavía no se han probad
 - Android Lint reportó 34 advertencias y 1 aviso; el detalle está en `app/build/reports/lint-results-debug.html` al generar ese informe.
 - La cobertura automática existente es de humo, no una validación funcional completa.
 - Los flujos con servicios externos deben verificarse con cuentas y datos de prueba autorizados. No se deben incluir contraseñas, tokens ni archivos privados de Firebase en los reportes o en GitHub.
+
+## Versión 1.1.0: sensor EMG y modos de medición
+
+La versión siguiente incorpora el flujo BLE del `ESP32-C3-EMG` (servicio
+`4fafc201-1fb5-459e-8fcc-c5c9c331914b`, característica
+`beb5483e-36e1-4688-b7f5-ea07361b26a8`), recepción de muestras JSON en mV, comandos del
+firmware, simulación explícita, Reset de sesión EMG y referencia Máximo persistida.
+
+Las pruebas automatizadas de esta versión validan acumulación/promedio/máximo EMG,
+rechazo de muestra inválida o repetida, porcentaje limitado y Reset que conserva la
+referencia. Las pruebas de descubrimiento, conexión, CCCD, notificaciones, comandos,
+desconexión y reconexión siguen requiriendo un ESP32-C3 físico y un Android compatible;
+no se afirma verificación física hasta que se ejecute ese ensayo.
+
+| ID | Tipo | Prueba | Resultado | Observaciones |
+|---|---|---|---|---|
+| CP-20 | Unitaria | Acumular mV reales, promedio, máximo y porcentaje limitado | APROBADA | `:app:testDebugUnitTest` |
+| CP-21 | Unitaria | Ignorar timestamp duplicado, estado inválido, métrica distinta y ADC fuera de rango | APROBADA | `:app:testDebugUnitTest` |
+| CP-22 | Unitaria | Evitar división por referencia cero y Reset de sesión conservando referencia | APROBADA | `:app:testDebugUnitTest` |
+| CP-23 | Compilación | Generar APK debug 1.1.0 | APROBADA | `:app:assembleDebug` |
+| CP-24 | Física BLE | Conectar, recibir notificaciones JSON y enviar comandos al ESP32-C3 | PENDIENTE | No había un ESP32-C3 disponible; no se afirma verificación física. |
+| CP-25 | Instrumentada | Ejecutar las pruebas Android en un dispositivo conectado | APROBADA | `:app:connectedDebugAndroidTest`; dispositivo SM-A065M con Android 16, 2 pruebas. |

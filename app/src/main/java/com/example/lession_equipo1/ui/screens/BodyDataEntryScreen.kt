@@ -171,14 +171,22 @@ fun BodyDataEntryScreen(
             } else {
                 Button(
                     onClick = {
-                        if (age.isNotEmpty() && weight.isNotEmpty() && height.isNotEmpty() && sport.isNotEmpty()) {
+                        val parsedAge = age.toIntOrNull()
+                        val parsedWeight = weight.toDoubleOrNull()
+                        val parsedHeight = height.toDoubleOrNull()
+
+                        if (parsedAge != null && parsedAge in 1..120
+                            && parsedWeight != null && parsedWeight in 1.0..500.0
+                            && parsedHeight != null && parsedHeight in 1.0..300.0
+                            && sport.isNotBlank()
+                        ) {
                             showError = false
                             viewModel.updateBodyData(
-                                age = age.toIntOrNull() ?: 0,
-                                weight = weight.toDoubleOrNull() ?: 0.0,
-                                height = height.toDoubleOrNull() ?: 0.0,
+                                age = parsedAge,
+                                weight = parsedWeight,
+                                height = parsedHeight,
                                 gender = gender,
-                                sport = sport
+                                sport = sport.trim()
                             )
                         } else {
                             showError = true

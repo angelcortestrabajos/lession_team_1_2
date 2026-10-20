@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,7 @@ fun HomeScreen(
     val riskLevel = viewModel.riskLevel
     val strings = LocalStrings.current
     val colors = LocalAppColors.current
+    val context = LocalContext.current
     var showDialog by remember(isDataMissing) { mutableStateOf(isDataMissing) }
     val lastNotification by viewModel.notifications.collectAsState(initial = "")
 
@@ -99,11 +101,21 @@ fun HomeScreen(
                 Text("${strings.welcome} $displayName!", color = colors.text, fontWeight = FontWeight.Bold)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val bleState by viewModel.bluetoothState.collectAsState()
+                val bleBattery by viewModel.parsedBatteryLevel.collectAsState()
+                val isConnected = bleState is com.example.lession_equipo1.network.BluetoothState.Connected
+
                 IconButton(onClick = onBluetoothClick) {
-                    Icon(Icons.Default.BluetoothConnected, null, tint = Color(0xFF00BFFF), modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Default.BluetoothConnected,
+                        null,
+                        tint = if (isConnected) Color(0xFF00FFCC) else Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
                 Icon(Icons.Default.BatteryFull, null, tint = colors.accent, modifier = Modifier.size(20.dp))
-                Text("80%", color = colors.text, fontSize = 12.sp)
+                val batteryText = if (isConnected && bleBattery != null) "$bleBattery%" else "--"
+                Text(batteryText, color = colors.text, fontSize = 12.sp)
             }
         }
 
@@ -144,6 +156,86 @@ fun HomeScreen(
         BiometricCard(strings.bodyTemp, "%.1f".format(viewModel.temperature), "°C", Icons.Default.Thermostat, Color.Yellow, strings.currentTemp)
         BiometricCard(strings.bloodPressure, "${viewModel.bloodPressureHigh}/${viewModel.bloodPressureLow}", "mmHg", Icons.Default.WaterDrop, Color.Red, strings.currentPress)
         BiometricCard(strings.muscleFatigue, viewModel.muscles.asSequence().map { it.fatigue }.average().toInt().toString(), "%", Icons.Default.FitnessCenter, Color.Green, strings.currentCarga)
+
+        val bluetoothState by viewModel.bluetoothState.collectAsState()
+        val supportsEmg by viewModel.supportsEmgCommands.collectAsState()
+        val emgSession = viewModel.emgSession
+        val isSimulating = viewModel.isSimulating
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.cardBackground)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    when {
+                        bluetoothState is com.example.lession_equipo1.network.BluetoothState.Connected ->
+                            "Sensor EMG conectado"
+                        bluetoothState is com.example.lession_equipo1.network.BluetoothState.Connecting ->
+                            "Conectando con el sensor BLE"
+                        bluetoothState is com.example.lession_equipo1.network.BluetoothState.Scanning ->
+                            "Buscando sensores BLE"
+                        bluetoothState is com.example.lession_equipo1.network.BluetoothState.Error ->
+                            "Error BLE: ${(bluetoothState as com.example.lession_equipo1.network.BluetoothState.Error).message}"
+                        isSimulating -> "Simulación activa"
+                        else -> "Sensor desconectado · simulación detenida"
+                    },
+                    color = colors.text,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "EMG: ${emgSession.latestSample?.let { "%.1f".format(it.valueMv) } ?: "--"} mV · " +
+                        "ADC: ${emgSession.latestSample?.adcRaw?.toString() ?: "--"} · " +
+                        "Rendimiento: ${emgSession.performancePercent?.let { "%.0f".format(it) } ?: "--"}%",
+                    color = colors.subText,
+                    fontSize = 13.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            if (isSimulating) viewModel.stopSimulation()
+                            else viewModel.startSimulation(user?.uid.orEmpty())
+                        },
+                        enabled = bluetoothState is com.example.lession_equipo1.network.BluetoothState.Idle ||
+                            bluetoothState is com.example.lession_equipo1.network.BluetoothState.Error,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (isSimulating) "Detener simulación" else "Iniciar simulación")
+                    }
+                    viewModel.emgReferenceSaveError?.let { error ->
+                        Text(error, color = Color.Red, fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { viewModel.resetEmgSession() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Reset")
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            if (!viewModel.setEmgMaximumReference()) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Se necesita una muestra EMG real válida para fijar el máximo.",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        enabled = bluetoothState is com.example.lession_equipo1.network.BluetoothState.Connected &&
+                            supportsEmg,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Máximo")
+                    }
+                    Text(
+                        "Referencia: ${emgSession.referenceMaxMv?.let { "%.1f".format(it) } ?: "--"} mV",
+                        color = colors.subText,
+                        modifier = Modifier.weight(1f).align(Alignment.CenterVertically)
+                    )
+                }
+            }
+        }
         
         Spacer(modifier = Modifier.height(80.dp)) // Padding for bottom bar
     }

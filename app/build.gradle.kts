@@ -9,15 +9,23 @@ plugins {
 
 android {
     namespace = "com.example.lession_equipo1"
-    compileSdk = 35
+    compileSdk = 36
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.example.lession_equipo1"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 36
+        versionCode = 2
+        versionName = "1.1.0"
+
+        val supabaseUrl = project.findProperty("supabaseUrl") as? String ?: "https://agcnpznjwzsukzvrmvrk.supabase.co"
+        val supabaseKey = project.findProperty("supabaseKey") as? String ?: "sb_publishable_xE2W7YWVEmOF0q_XygMViQ_pReB3oto"
+        val googleWebClientId = project.findProperty("googleWebClientId") as? String ?: "962385546475-i72v6brb98rdj3so7u3ch5d3dl9vhvrf.apps.googleusercontent.com"
+
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,7 +45,9 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+
 }
 
 kotlin {

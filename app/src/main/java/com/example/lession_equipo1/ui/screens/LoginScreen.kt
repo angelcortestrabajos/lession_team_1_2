@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -84,9 +85,9 @@ fun LoginScreen(
                     .padding(8.dp)
             ) {
                 Icon(
-                    painter = painterResource(id = android.R.drawable.ic_dialog_map),
-                    contentDescription = null,
-                    tint = colors.text,
+                    Icons.Default.FitnessCenter,
+                    contentDescription = "Logo Lession",
+                    tint = colors.accent,
                     modifier = Modifier.size(40.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
