@@ -2,9 +2,9 @@
 
 **Aplicación:** Lession Team 1/2
 
-**Versión probada:** 1.0 (debug)
+**Versión probada:** 1.1.0 (debug)
 
-**Fecha de ejecución:** 13 de octubre de 2026
+Las pruebas de la versión 1.1.0 se ejecutaron antes de publicar el commit en GitHub.
 
 Este documento separa las comprobaciones realmente ejecutadas de las pruebas funcionales pendientes. Un resultado satisfactorio al compilar o abrir la aplicación no significa que se hayan probado todas sus funciones.
 
@@ -64,10 +64,10 @@ Los siguientes escenarios están identificados, pero **todavía no se han probad
 
 ## Resumen y limitaciones
 
-- La compilación debug, la prueba unitaria de ejemplo y las dos pruebas instrumentadas existentes pasaron.
+- La compilación debug, las 10 pruebas unitarias (1 de ejemplo y 9 de sesión EMG) y las 2 pruebas instrumentadas pasaron.
 - Se comprobó manualmente la instalación e inicio de la aplicación en un Moto G22 con Android 12.
-- Android Lint reportó 34 advertencias y 1 aviso; el detalle está en `app/build/reports/lint-results-debug.html` al generar ese informe.
-- La cobertura automática existente es de humo, no una validación funcional completa.
+- Android Lint reportó 36 advertencias y 1 sugerencia; el detalle está en `app/build/reports/lint-results-debug.html`.
+- La cobertura automática incluye las reglas del modelo EMG y pruebas instrumentadas de humo, no una validación funcional completa.
 - Los flujos con servicios externos deben verificarse con cuentas y datos de prueba autorizados. No se deben incluir contraseñas, tokens ni archivos privados de Firebase en los reportes o en GitHub.
 
 ## Versión 1.1.0: sensor EMG y modos de medición
@@ -91,3 +91,15 @@ no se afirma verificación física hasta que se ejecute ese ensayo.
 | CP-23 | Compilación | Generar APK debug 1.1.0 | APROBADA | `:app:assembleDebug` |
 | CP-24 | Física BLE | Conectar, recibir notificaciones JSON y enviar comandos al ESP32-C3 | PENDIENTE | No había un ESP32-C3 disponible; no se afirma verificación física. |
 | CP-25 | Instrumentada | Ejecutar las pruebas Android en un dispositivo conectado | APROBADA | `:app:connectedDebugAndroidTest`; dispositivo SM-A065M con Android 16, 2 pruebas. |
+
+## Pruebas funcionales aún pendientes en 1.1.0
+
+Las pruebas unitarias cubren las reglas del modelo de sesión EMG, pero no sustituyen
+las pruebas de interacción de la aplicación ni el ensayo con el sensor físico.
+
+| Caso | Estado | Motivo |
+|---|---|---|
+| Detener la simulación y confirmar que cesan las actualizaciones e inserciones posteriores en historial | PENDIENTE | No se ejecutó una prueba funcional automatizada que observe el ViewModel y el historial después de detenerlo. |
+| Probar Reset con sensor conectado, desconectado y simulación detenida | PENDIENTE | Las pruebas unitarias verifican el reinicio del modelo, pero falta validar las transiciones de UI y BLE de extremo a extremo. |
+| Guardar Máximo y verificar el porcentaje tras reiniciar la aplicación | PENDIENTE | La fórmula y los casos límite se prueban unitariamente; falta una prueba de persistencia y flujo de interfaz. |
+| Probar permisos, descubrimiento, conexión, notificaciones, comandos, desconexión y reconexión BLE | PENDIENTE | Requiere ESP32-C3-EMG físico; CP-24 sigue pendiente. |
