@@ -52,6 +52,12 @@ class BluetoothController(private val context: Context) {
     val parsedBatteryLevel: StateFlow<Int?> = bleManager.parsedBatteryLevel
     val parsedEmgMv: StateFlow<Float?> = bleManager.parsedEmgMv
     val parsedEmgAdc: StateFlow<Int?> = bleManager.parsedEmgAdc
+    val parsedMotionStability: StateFlow<Double?> = bleManager.parsedMotionStability
+    val parsedIrTemp: StateFlow<Double?> = bleManager.parsedIrTemp
+    val parsedBodyTemp: StateFlow<Double?> = bleManager.parsedBodyTemp
+    val parsedSpO2: StateFlow<Int?> = bleManager.parsedSpO2
+    val lastTelemetryPacketMs: StateFlow<Long> = bleManager.lastTelemetryPacketMs
+    val sensorTimestamps: StateFlow<Map<String, Long>> = bleManager.sensorTimestamps
     val emgSamples = bleManager.emgSamples
     val emgSampleSequence = bleManager.emgSampleSequence
     val supportsEmgCommands = bleManager.supportsEmgCommands

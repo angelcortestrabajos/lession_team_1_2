@@ -3,7 +3,10 @@ package com.example.lession_equipo1
 import com.example.lession_equipo1.model.IntensityLevel
 import com.example.lession_equipo1.model.EmgSample
 import com.example.lession_equipo1.model.EmgSession
+import com.example.lession_equipo1.model.HistoryEntry
 import com.example.lession_equipo1.model.MuscleData
+import com.example.lession_equipo1.viewmodel.StatisticsPeriod
+import com.example.lession_equipo1.viewmodel.aggregateStatistics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -119,6 +122,69 @@ class LessionUnitTest {
         assertTrue(reset.sampleValuesMv.isEmpty())
         assertEquals(null, reset.latestSample)
         assertEquals(900f, reset.referenceMaxMv!!)
+    }
+
+    @Test
+    fun statistics_ignoreInvalidHeartRatesAndUnavailableRiskOrFatigue() {
+        val period = StatisticsPeriod.Day(1L)
+        val state = aggregateStatistics(
+            listOf(
+                HistoryEntry(
+                    heartRate = 0,
+                    fatigue = 95.0,
+                    riskLevel = 90.0,
+                    fatigueAvailable = true,
+                    riskAvailable = true
+                ),
+                HistoryEntry(
+                    heartRate = 100,
+                    fatigue = 80.0,
+                    riskLevel = 70.0
+                ),
+                HistoryEntry(
+                    heartRate = 80,
+                    fatigue = 50.0,
+                    riskLevel = 40.0,
+                    fatigueAvailable = true,
+                    riskAvailable = true,
+                    riskState = "Precaución"
+                ),
+                HistoryEntry(
+                    heartRate = 120,
+                    fatigue = 150.0,
+                    riskLevel = Double.NaN,
+                    fatigueAvailable = true,
+                    riskAvailable = true
+                )
+            ),
+            period
+        )
+
+        assertEquals(period, state.period)
+        assertEquals(3, state.entries.size)
+        assertEquals(100, state.avgHeartRate)
+        assertEquals(80, state.minHeartRate)
+        assertEquals(120, state.maxHeartRate)
+        assertEquals(50, state.avgFatigue)
+        assertEquals(50, state.minFatigue)
+        assertEquals(50, state.maxFatigue)
+        assertEquals(40, state.avgRisk)
+        assertEquals(40, state.minRisk)
+        assertEquals(40, state.maxRisk)
+        assertEquals("Precaución", state.mostFrequentState)
+    }
+
+    @Test
+    fun statistics_emptyOrInvalidHistoryHasNoZeroValuedMetrics() {
+        val state = aggregateStatistics(
+            listOf(HistoryEntry(heartRate = 0, riskAvailable = true, riskLevel = 0.0)),
+            StatisticsPeriod.Today
+        )
+
+        assertTrue(state.entries.isEmpty())
+        assertEquals(null, state.avgHeartRate)
+        assertEquals(null, state.avgRisk)
+        assertEquals(null, state.avgFatigue)
     }
 
     @Test

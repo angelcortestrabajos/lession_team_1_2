@@ -183,23 +183,30 @@ class FirestoreRepository {
         batch.commit().await()
     }
 
-    fun getHistoryByRange(uid: String, start: Long, end: Long): Flow<List<HistoryEntry>> = flow {
-        try {
-            val snapshot = db.collection("users").document(uid)
+    fun getHistoryByRange(uid: String, start: Long, end: Long): Flow<List<HistoryEntry>> =
+        callbackFlow {
+            val registration = db.collection("users").document(uid)
                 .collection("biometric_history")
                 .whereGreaterThanOrEqualTo("timestamp", Timestamp(Date(start)))
                 .whereLessThanOrEqualTo("timestamp", Timestamp(Date(end)))
                 .orderBy("timestamp", Query.Direction.ASCENDING)
-                .get()
-                .await()
-            
-            val history = snapshot.documents.map { doc ->
-                doc.toObject(HistoryEntry::class.java)?.apply { id = doc.id } ?: HistoryEntry()
-            }
-            emit(history)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emit(emptyList())
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot == null) {
+                        close(IllegalStateException("Firestore devolvió un historial vacío."))
+                        return@addSnapshotListener
+                    }
+                    val history = snapshot.documents.mapNotNull { document ->
+                        document.toObject(HistoryEntry::class.java)?.apply {
+                            id = document.id
+                        }
+                    }
+                    trySend(history)
+                }
+
+            awaitClose { registration.remove() }
         }
-    }
 }

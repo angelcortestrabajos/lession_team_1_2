@@ -22,11 +22,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.lession_equipo1.BiometricViewModel
+import com.example.lession_equipo1.model.DataSourceState
 import com.example.lession_equipo1.ui.LocalAppColors
 import com.example.lession_equipo1.ui.LocalStrings
 import com.example.lession_equipo1.viewmodel.AuthViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun HomeScreen(
@@ -36,13 +41,15 @@ fun HomeScreen(
     onBluetoothClick: () -> Unit,
     onCompleteProfileClick: () -> Unit
 ) {
-    val user by authViewModel.currentUser.collectAsState()
+    val user by authViewModel.currentUser.collectAsStateWithLifecycle()
     val riskLevel = viewModel.riskLevel
+    val latestTelemetryMs by viewModel.lastTelemetryPacketMs.collectAsStateWithLifecycle()
+    val dataSourceState by viewModel.dataSourceState.collectAsStateWithLifecycle()
     val strings = LocalStrings.current
     val colors = LocalAppColors.current
     val context = LocalContext.current
     var showDialog by remember(isDataMissing) { mutableStateOf(isDataMissing) }
-    val lastNotification by viewModel.notifications.collectAsState(initial = "")
+    val lastNotification by viewModel.notifications.collectAsStateWithLifecycle(initialValue = "")
 
     if (showDialog) {
         AlertDialog(
@@ -101,22 +108,36 @@ fun HomeScreen(
                 Text("${strings.welcome} $displayName!", color = colors.text, fontWeight = FontWeight.Bold)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val bleState by viewModel.bluetoothState.collectAsState()
-                val bleBattery by viewModel.parsedBatteryLevel.collectAsState()
+                val bleState by viewModel.bluetoothState.collectAsStateWithLifecycle()
+                val bleBattery by viewModel.parsedBatteryLevel.collectAsStateWithLifecycle()
                 val isConnected = bleState is com.example.lession_equipo1.network.BluetoothState.Connected
 
                 IconButton(onClick = onBluetoothClick) {
                     Icon(
-                        Icons.Default.BluetoothConnected,
-                        null,
+                        if (isConnected) Icons.Default.BluetoothConnected else Icons.Default.Bluetooth,
+                        if (isConnected) "Bluetooth conectado" else "Abrir conexión Bluetooth",
                         tint = if (isConnected) Color(0xFF00FFCC) else Color.Gray,
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                Icon(Icons.Default.BatteryFull, null, tint = colors.accent, modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.BatteryFull,
+                    "Batería BLE",
+                    tint = if (isConnected && bleBattery != null) colors.accent else colors.subText,
+                    modifier = Modifier.size(20.dp)
+                )
                 val batteryText = if (isConnected && bleBattery != null) "$bleBattery%" else "--"
                 Text(batteryText, color = colors.text, fontSize = 12.sp)
             }
+        }
+
+        if (latestTelemetryMs > 0L && dataSourceState != DataSourceState.REAL_SENSORS_ACTIVE) {
+            Text(
+                "La transmisión BLE se detuvo; se conserva la última lectura recibida.",
+                color = colors.subText,
+                fontSize = 12.sp,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            )
         }
 
         if (lastNotification.isNotEmpty()) {
@@ -140,25 +161,119 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        NewRiskGauge(riskLevel)
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        RecommendationMessage(riskLevel)
+        // Indicador del Origen y Estado Real de Datos
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = dataSourceState.getColor().copy(alpha = 0.15f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, dataSourceState.getColor())
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = when(dataSourceState) {
+                        DataSourceState.REAL_SENSORS_ACTIVE -> Icons.Default.Sensors
+                        DataSourceState.SIMULATION_ACTIVE -> Icons.Default.PlayCircle
+                        DataSourceState.CONNECTED_NO_DATA -> Icons.Default.BluetoothConnected
+                        DataSourceState.COMMUNICATION_ERROR -> Icons.Default.ErrorOutline
+                        DataSourceState.SENSORS_DISCONNECTED -> Icons.Default.SensorsOff
+                    },
+                    contentDescription = null,
+                    tint = dataSourceState.getColor()
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Origen de datos: ${dataSourceState.getLabel()}",
+                        color = dataSourceState.getColor(),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    if (dataSourceState == DataSourceState.REAL_SENSORS_ACTIVE) {
+                        Text(
+                            text = "Se recibieron mediciones válidas desde Bluetooth LE.",
+                            color = colors.subText,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Text(
+                        text = latestTelemetryMs.takeIf { it > 0L }?.let {
+                            "Último dato BLE: ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(it))}"
+                        } ?: "Esperando mediciones BLE",
+                        color = colors.subText,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
 
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        if (viewModel.hasRiskMeasurements) {
+            NewRiskGauge(riskLevel)
+            Spacer(modifier = Modifier.height(12.dp))
+            RecommendationMessage(riskLevel)
+        } else {
+            Text(
+                "Esperando mediciones para estimar el riesgo",
+                color = colors.subText,
+                modifier = Modifier.padding(vertical = 24.dp)
+            )
+        }
+        
         Spacer(modifier = Modifier.height(24.dp))
         Text(strings.bioSignals, color = colors.text, fontSize = 18.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
         Spacer(modifier = Modifier.height(16.dp))
 
-        BiometricCard(strings.heartRate, viewModel.heartRate.toInt().toString(), "BPM", Icons.Default.Favorite, Color.Red, strings.currentFreq)
-        BiometricCard(strings.bodyTemp, "%.1f".format(viewModel.temperature), "°C", Icons.Default.Thermostat, Color.Yellow, strings.currentTemp)
-        BiometricCard(strings.bloodPressure, "${viewModel.bloodPressureHigh}/${viewModel.bloodPressureLow}", "mmHg", Icons.Default.WaterDrop, Color.Red, strings.currentPress)
-        BiometricCard(strings.muscleFatigue, viewModel.muscles.asSequence().map { it.fatigue }.average().toInt().toString(), "%", Icons.Default.FitnessCenter, Color.Green, strings.currentCarga)
+        BiometricCard(
+            strings.heartRate,
+            if (viewModel.heartRate > 0.0) viewModel.heartRate.toInt().toString() else "Sin datos",
+            if (viewModel.heartRate > 0.0) "BPM" else "",
+            Icons.Default.Favorite,
+            Color.Red,
+            strings.currentFreq
+        )
+        if (viewModel.spO2 > 0) {
+            BiometricCard("Saturación O2 (SpO2)", "${viewModel.spO2}", "%", Icons.Default.WaterDrop, Color.Cyan, "Pulsioxímetro MAX30102")
+        }
+        BiometricCard(
+            strings.bodyTemp,
+            if (viewModel.temperature > 0.0) "%.1f".format(viewModel.temperature) else "Sin datos",
+            if (viewModel.temperature > 0.0) "°C" else "",
+            Icons.Default.Thermostat,
+            Color.Yellow,
+            strings.currentTemp
+        )
+        BiometricCard(
+            strings.bloodPressure,
+            if (viewModel.bloodPressureHigh > 0 && viewModel.bloodPressureLow > 0) {
+                "${viewModel.bloodPressureHigh}/${viewModel.bloodPressureLow}"
+            } else {
+                "Sin datos"
+            },
+            if (viewModel.bloodPressureHigh > 0 && viewModel.bloodPressureLow > 0) "mmHg" else "",
+            Icons.Default.WaterDrop,
+            Color.Red,
+            strings.currentPress
+        )
+        BiometricCard(
+            strings.muscleFatigue,
+            if (viewModel.isSimulating) {
+                viewModel.muscles.asSequence().map { it.fatigue }.average().toInt().toString()
+            } else {
+                "Sin datos"
+            },
+            if (viewModel.isSimulating) "%" else "",
+            Icons.Default.FitnessCenter,
+            Color.Green,
+            strings.currentCarga
+        )
 
-        val bluetoothState by viewModel.bluetoothState.collectAsState()
-        val supportsEmg by viewModel.supportsEmgCommands.collectAsState()
+        val bluetoothState by viewModel.bluetoothState.collectAsStateWithLifecycle()
+        val supportsEmg by viewModel.supportsEmgCommands.collectAsStateWithLifecycle()
         val emgSession = viewModel.emgSession
         val isSimulating = viewModel.isSimulating
         Card(
@@ -168,8 +283,10 @@ fun HomeScreen(
             Column(Modifier.padding(16.dp)) {
                 Text(
                     when {
+                        bluetoothState is com.example.lession_equipo1.network.BluetoothState.Connected && supportsEmg ->
+                            "Dispositivo BLE conectado · módulo EMG compatible"
                         bluetoothState is com.example.lession_equipo1.network.BluetoothState.Connected ->
-                            "Sensor EMG conectado"
+                            "Dispositivo BLE conectado · esperando mediciones"
                         bluetoothState is com.example.lession_equipo1.network.BluetoothState.Connecting ->
                             "Conectando con el sensor BLE"
                         bluetoothState is com.example.lession_equipo1.network.BluetoothState.Scanning ->
@@ -177,7 +294,7 @@ fun HomeScreen(
                         bluetoothState is com.example.lession_equipo1.network.BluetoothState.Error ->
                             "Error BLE: ${(bluetoothState as com.example.lession_equipo1.network.BluetoothState.Error).message}"
                         isSimulating -> "Simulación activa"
-                        else -> "Sensor desconectado · simulación detenida"
+                        else -> "Dispositivo BLE desconectado"
                     },
                     color = colors.text,
                     fontWeight = FontWeight.Bold
@@ -237,6 +354,29 @@ fun HomeScreen(
             }
         }
         
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Descargo / Aviso Médico Explicativo de los Algoritmos Heurísticos
+        Surface(
+            color = colors.cardBackground.copy(alpha = 0.6f),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Info, contentDescription = null, tint = colors.subText, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Aviso: El riesgo de lesión y la fatiga muscular son estimaciones algorítmicas heurísticas calculadas a partir de las métricas de los sensores. No constituyen un diagnóstico médico ni predicciones clínicamente validadas.",
+                    color = colors.subText,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(80.dp)) // Padding for bottom bar
     }
 }
@@ -310,6 +450,7 @@ fun NewRiskGauge(risk: Float) {
 fun RecommendationMessage(risk: Float) {
     val colors = LocalAppColors.current
     val message = when {
+        risk == 0f -> "Simulación detenida / Sin mediciones activas. Inicia la simulación o conecta un sensor real."
         risk < 40 -> "Tu estado es excelente. Puedes continuar con tu entrenamiento de alta intensidad."
         risk < 75 -> "Atención: Se detecta fatiga moderada. Considera reducir la carga de trabajo."
         else -> "¡PELIGRO! Riesgo de lesión inminente. Detén la actividad y descansa inmediatamente."

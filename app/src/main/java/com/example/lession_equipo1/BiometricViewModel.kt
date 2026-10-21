@@ -7,12 +7,16 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.lession_equipo1.data.local.entity.HistoryRecordEntity
+import com.example.lession_equipo1.model.DataSourceState
 import com.example.lession_equipo1.model.HistoryEntry
 import com.example.lession_equipo1.model.EmgSession
 import com.example.lession_equipo1.model.MuscleData
+import com.example.lession_equipo1.model.PhysicalSensorInfo
+import com.example.lession_equipo1.model.SensorConnectionState
 import com.example.lession_equipo1.network.BluetoothController
 import com.example.lession_equipo1.network.BluetoothState
 import com.example.lession_equipo1.repository.FirestoreRepository
@@ -22,7 +26,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.IOException
 
@@ -41,11 +50,12 @@ class BiometricViewModel(
     )
     val muscles: List<MuscleData> = _muscles
 
-    var heartRate by mutableDoubleStateOf(75.0)
-    var stability by mutableDoubleStateOf(90.0)
-    var temperature by mutableDoubleStateOf(36.5)
-    var bloodPressureHigh by mutableIntStateOf(120)
-    var bloodPressureLow by mutableIntStateOf(80)
+    var heartRate by mutableDoubleStateOf(0.0)
+    var spO2 by mutableIntStateOf(0)
+    var stability by mutableDoubleStateOf(0.0)
+    var temperature by mutableDoubleStateOf(0.0)
+    var bloodPressureHigh by mutableIntStateOf(0)
+    var bloodPressureLow by mutableIntStateOf(0)
     var isSimulating by mutableStateOf(value = false)
     var activeActivity by mutableStateOf("")
     var emgSession by mutableStateOf(EmgSession())
@@ -55,9 +65,23 @@ class BiometricViewModel(
 
     val riskLevel: Float
         get() {
+            if (!hasRiskMeasurements) {
+                return 0f
+            }
             val avgFatigue = _muscles.asSequence().map { it.fatigue }.average().toFloat()
-            return ((avgFatigue * 0.7f) + ((100 - stability.toFloat()) * 0.3f)).coerceIn(0f, 100f)
+            if (heartRate == 0.0 && stability == 0.0 && avgFatigue == 0f) {
+                return 0f
+            }
+            val hrRisk = if (heartRate > 100.0) {
+                ((heartRate - 100.0) / (180.0 - 100.0) * 100.0).coerceIn(0.0, 100.0).toFloat()
+            } else 0f
+            val stabilityRisk = (100f - stability.toFloat()).coerceAtLeast(0f)
+
+            return ((avgFatigue * 0.45f) + (stabilityRisk * 0.35f) + (hrRisk * 0.20f)).coerceIn(0f, 100f)
         }
+
+    val hasRiskMeasurements: Boolean
+        get() = isSimulating
 
     private val _notifications = MutableSharedFlow<String>()
     val notifications = _notifications.asSharedFlow()
@@ -70,17 +94,110 @@ class BiometricViewModel(
     val parsedBatteryLevel = bluetoothController.parsedBatteryLevel
     val parsedEmgMv = bluetoothController.parsedEmgMv
     val parsedEmgAdc = bluetoothController.parsedEmgAdc
+    val parsedMotionStability = bluetoothController.parsedMotionStability
+    val parsedIrTemp = bluetoothController.parsedIrTemp
+    val parsedBodyTemp = bluetoothController.parsedBodyTemp
+    val parsedSpO2 = bluetoothController.parsedSpO2
+    val lastTelemetryPacketMs = bluetoothController.lastTelemetryPacketMs
     val supportsEmgCommands = bluetoothController.supportsEmgCommands
     val commandError = bluetoothController.commandError
 
+    val dataSourceState: StateFlow<DataSourceState> = combine(
+        bluetoothController.state,
+        bluetoothController.lastTelemetryPacketMs,
+        snapshotFlow { isSimulating },
+        flow {
+            while (true) {
+                emit(System.currentTimeMillis())
+                delay(1000L)
+            }
+        }
+    ) { btState, lastPacketMs, simulating, now ->
+        val isPacketRecent = lastPacketMs > 0L && (now - lastPacketMs < 10000L)
+
+        when {
+            btState is BluetoothState.Error -> DataSourceState.COMMUNICATION_ERROR
+            btState is BluetoothState.Connected && isPacketRecent -> DataSourceState.REAL_SENSORS_ACTIVE
+            btState is BluetoothState.Connected && !isPacketRecent -> DataSourceState.CONNECTED_NO_DATA
+            simulating -> DataSourceState.SIMULATION_ACTIVE
+            else -> DataSourceState.SENSORS_DISCONNECTED
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = DataSourceState.SENSORS_DISCONNECTED
+    )
+
+    val physicalSensors: StateFlow<List<PhysicalSensorInfo>> = combine(
+        bluetoothController.state,
+        bluetoothController.connectedDevice,
+        bluetoothController.sensorTimestamps,
+        bluetoothController.parsedHeartRate,
+        bluetoothController.parsedBatteryLevel,
+        bluetoothController.parsedEmgMv,
+        bluetoothController.parsedMotionStability,
+        bluetoothController.parsedIrTemp,
+        bluetoothController.parsedBodyTemp,
+        flow {
+            while (true) {
+                emit(Unit)
+                delay(1000L)
+            }
+        }
+    ) { args ->
+        buildPhysicalSensorsList(
+            btState = args[0] as BluetoothState,
+            device = args[1] as? BluetoothDevice,
+            timestamps = @Suppress("UNCHECKED_CAST") (args[2] as Map<String, Long>),
+            hr = args[3] as? Int,
+            battery = args[4] as? Int,
+            emgMv = args[5] as? Float,
+            stabilityVal = args[6] as? Double,
+            irTemp = args[7] as? Double,
+            bodyTemp = args[8] as? Double
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = emptyList()
+    )
+
     init {
-        // Escuchar ritmo cardíaco de sensor BLE en tiempo real
+        // Escuchar ritmo cardíaco de sensor BLE en tiempo real (MAX30102 / Estándar)
         viewModelScope.launch {
             bluetoothController.parsedHeartRate.collect { realHr ->
                 if (realHr != null && realHr > 0) {
                     heartRate = realHr.toDouble()
                     checkThresholds()
                     currentUserId?.let { saveToFirestore(it) }
+                }
+            }
+        }
+
+        // Escuchar estabilidad MPU6050 de sensor BLE en tiempo real
+        viewModelScope.launch {
+            bluetoothController.parsedMotionStability.collect { realStability ->
+                if (realStability != null && realStability in 0.0..100.0) {
+                    stability = realStability
+                    checkThresholds()
+                }
+            }
+        }
+
+        // Escuchar temperatura infrarroja MLX90614
+        viewModelScope.launch {
+            bluetoothController.parsedIrTemp.collect { realTemp ->
+                if (realTemp != null && realTemp in 20.0..45.0) {
+                    temperature = realTemp
+                }
+            }
+        }
+
+        // Escuchar temperatura corporal MAX30205
+        viewModelScope.launch {
+            bluetoothController.parsedBodyTemp.collect { realTemp ->
+                if (realTemp != null && realTemp in 20.0..45.0) {
+                    temperature = realTemp
                 }
             }
         }
@@ -149,9 +266,13 @@ class BiometricViewModel(
         simulationGeneration++
         val generation = simulationGeneration
         isSimulating = true
+
+        // Generar actualización inicial e iterar cada 2 segundos
+        updateMuscles()
+
         simulationJob = viewModelScope.launch {
-            while (isActive && generation == simulationGeneration) {
-                delay(30000)
+            while (isActive && generation == simulationGeneration && isSimulating && canSimulate()) {
+                delay(2000)
                 if (isActive && generation == simulationGeneration && isSimulating && canSimulate()) {
                     updateMuscles()
                 }
@@ -166,6 +287,23 @@ class BiometricViewModel(
         simulationJob = null
         simulationSaveJob?.cancel()
         simulationSaveJob = null
+
+        resetDashboardMetricsToZero()
+    }
+
+    fun resetDashboardMetricsToZero() {
+        // Restablece los indicadores a cero solo cuando los sensores BLE no están transmitiendo datos reales
+        if (bluetoothState.value !is BluetoothState.Connected) {
+            heartRate = 0.0
+            stability = 0.0
+            temperature = 0.0
+            bloodPressureHigh = 0
+            bloodPressureLow = 0
+            for (i in _muscles.indices) {
+                _muscles[i] = _muscles[i].copy(fatigue = 0f)
+            }
+            resetEmgSession()
+        }
     }
 
     fun triggerManualSimulation() {
@@ -247,6 +385,85 @@ class BiometricViewModel(
         return true
     }
 
+    private fun buildPhysicalSensorsList(
+        btState: BluetoothState,
+        device: BluetoothDevice?,
+        timestamps: Map<String, Long>,
+        hr: Int?,
+        battery: Int?,
+        emgMv: Float?,
+        stabilityVal: Double?,
+        irTemp: Double?,
+        bodyTemp: Double?
+    ): List<PhysicalSensorInfo> {
+        val now = System.currentTimeMillis()
+        val isBtConnected = btState is BluetoothState.Connected
+        val isBtConnecting = btState is BluetoothState.Connecting
+        val isBtError = btState is BluetoothState.Error
+
+        val mainDeviceState = when {
+            isBtConnected -> SensorConnectionState.CONNECTED
+            isBtConnecting -> SensorConnectionState.CONNECTING
+            isBtError -> SensorConnectionState.ERROR
+            else -> SensorConnectionState.DISCONNECTED
+        }
+
+        val deviceName = device?.name?.takeIf { it.isNotBlank() } ?: "Dispositivo BLE"
+        val sensors = mutableListOf(
+            PhysicalSensorInfo(
+                id = "ble_device",
+                name = deviceName,
+                description = "Estado de la conexión Bluetooth LE",
+                connectionState = mainDeviceState,
+                protocol = "Bluetooth LE",
+                isMainDevice = true
+            )
+        )
+
+        fun addObservedSensor(
+            id: String,
+            name: String,
+            description: String,
+            reading: String?
+        ) {
+            val lastSeen = timestamps[id] ?: return
+            sensors += PhysicalSensorInfo(
+                id = id,
+                name = name,
+                description = description,
+                connectionState = if (isBtConnected && now - lastSeen < 15000L) {
+                    SensorConnectionState.CONNECTED
+                } else {
+                    SensorConnectionState.DISCONNECTED
+                },
+                protocol = "Bluetooth LE GATT",
+                lastSeenMs = lastSeen,
+                lastReading = reading
+            )
+        }
+
+        addObservedSensor(
+            id = "heartRate",
+            name = "Frecuencia cardíaca BLE",
+            description = "Lecturas recibidas del servicio estándar de frecuencia cardíaca",
+            reading = hr?.let { "$it BPM" }
+        )
+        addObservedSensor(
+            id = "battery",
+            name = "Nivel de batería BLE",
+            description = "Nivel informado por el servicio estándar de batería",
+            reading = battery?.let { "$it%" }
+        )
+        addObservedSensor(
+            id = "emg",
+            name = "Módulo EMG",
+            description = "Muestras EMG validadas recibidas por BLE",
+            reading = emgMv?.let { "%.1f mV".format(it) }
+        )
+
+        return sensors
+    }
+
     private fun canSimulate(): Boolean =
         bluetoothState.value is BluetoothState.Idle || bluetoothState.value is BluetoothState.Error
 
@@ -284,6 +501,7 @@ class BiometricViewModel(
             ) return@launch
             val risk = riskLevel
             val state = when {
+                !hasRiskMeasurements -> "Sin datos"
                 risk < 40 -> "Óptimo"
                 risk < 75 -> "Precaución"
                 else -> "Riesgo"
@@ -302,6 +520,10 @@ class BiometricViewModel(
                 riskState = state,
                 activityType = activeActivity,
                 deviceId = if (simulationToken == null) "BLE" else "SIMULATION",
+                riskAvailable = hasRiskMeasurements,
+                fatigueAvailable = isSimulating,
+                temperatureAvailable = temperature in 20.0..45.0,
+                bloodPressureAvailable = bloodPressureHigh > 0 && bloodPressureLow > 0,
                 timestamp = com.google.firebase.Timestamp.now()
             )
             if (simulationToken != null &&

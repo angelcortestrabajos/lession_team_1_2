@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.lession_equipo1"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "3.0.0"
 
         val supabaseUrl = project.findProperty("supabaseUrl") as? String ?: "https://agcnpznjwzsukzvrmvrk.supabase.co"
         val supabaseKey = project.findProperty("supabaseKey") as? String ?: "sb_publishable_xE2W7YWVEmOF0q_XygMViQ_pReB3oto"
@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui)

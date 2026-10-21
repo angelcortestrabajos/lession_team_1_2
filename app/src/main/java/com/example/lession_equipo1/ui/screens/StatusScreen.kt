@@ -1,5 +1,6 @@
 package com.example.lession_equipo1.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -21,9 +22,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lession_equipo1.BiometricViewModel
 import com.example.lession_equipo1.model.MuscleData
+import com.example.lession_equipo1.model.PhysicalSensorInfo
+import com.example.lession_equipo1.model.SensorConnectionState
 import com.example.lession_equipo1.network.BluetoothState
+import com.example.lession_equipo1.ui.AppColors
 import com.example.lession_equipo1.ui.LocalAppColors
 import com.example.lession_equipo1.ui.LocalStrings
 
@@ -32,7 +37,7 @@ fun StatusScreen(viewModel: BiometricViewModel) {
     val colors = LocalAppColors.current
     val strings = LocalStrings.current
     val muscles = viewModel.muscles
-    val bluetoothState by viewModel.bluetoothState.collectAsState()
+    val isSimulating = viewModel.isSimulating
 
     Column(
         modifier = Modifier
@@ -43,11 +48,21 @@ fun StatusScreen(viewModel: BiometricViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Estado Corporal",
+            text = "Estado Corporal y Sensores",
             color = colors.text,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            text = if (isSimulating) {
+                "Mapa basado en datos de demostración; no representa lecturas físicas."
+            } else {
+                "Mapa neutral: no hay mediciones de fatiga muscular desde la fuente BLE actual."
+            },
+            color = colors.subText,
+            fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
         )
         
         Spacer(modifier = Modifier.height(24.dp))
@@ -60,13 +75,13 @@ fun StatusScreen(viewModel: BiometricViewModel) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Frontal", color = colors.subText, fontSize = 12.sp)
                 Box(modifier = Modifier.size(150.dp, 280.dp)) {
-                    BodySilhouette(muscles, isBack = false)
+                    BodySilhouette(muscles, isBack = false, hasMeasurements = viewModel.isSimulating)
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Posterior", color = colors.subText, fontSize = 12.sp)
                 Box(modifier = Modifier.size(150.dp, 280.dp)) {
-                    BodySilhouette(muscles, isBack = true)
+                    BodySilhouette(muscles, isBack = true, hasMeasurements = viewModel.isSimulating)
                 }
             }
         }
@@ -78,9 +93,9 @@ fun StatusScreen(viewModel: BiometricViewModel) {
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // Active Sensors Panel / Search Device
+        // Active Sensors Panel displaying real physical sensors
         ActiveSensorsPanel(
-            state = bluetoothState,
+            viewModel = viewModel,
             onSearchClick = { viewModel.startBluetoothScan() }
         )
         
@@ -88,15 +103,43 @@ fun StatusScreen(viewModel: BiometricViewModel) {
         
         // Biometric summaries
         Row(modifier = Modifier.fillMaxWidth()) {
-            SmallBiometricCard(strings.heartRate, viewModel.heartRate.toInt().toString(), "BPM", Modifier.weight(1f), colors.accent)
+            SmallBiometricCard(
+                strings.heartRate,
+                if (viewModel.heartRate > 0.0) viewModel.heartRate.toInt().toString() else "Sin datos",
+                if (viewModel.heartRate > 0.0) "BPM" else "",
+                Modifier.weight(1f),
+                colors.accent
+            )
             Spacer(modifier = Modifier.width(8.dp))
-            SmallBiometricCard(strings.bodyTemp, "%.1f".format(viewModel.temperature), "°C", Modifier.weight(1f), Color.Yellow)
+            SmallBiometricCard(
+                strings.bodyTemp,
+                if (viewModel.temperature > 0.0) "%.1f".format(viewModel.temperature) else "Sin datos",
+                if (viewModel.temperature > 0.0) "°C" else "",
+                Modifier.weight(1f),
+                Color.Yellow
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            SmallBiometricCard(strings.muscleFatigue, muscles.asSequence().map { it.fatigue }.average().toInt().toString(), "%", Modifier.weight(1f), Color.Green)
+            SmallBiometricCard(
+                strings.muscleFatigue,
+                if (viewModel.isSimulating) muscles.asSequence().map { it.fatigue }.average().toInt().toString() else "Sin datos",
+                if (viewModel.isSimulating) "%" else "",
+                Modifier.weight(1f),
+                Color.Green
+            )
             Spacer(modifier = Modifier.width(8.dp))
-            SmallBiometricCard(strings.bloodPressure, "${viewModel.bloodPressureHigh}/${viewModel.bloodPressureLow}", "mmHg", Modifier.weight(1f), Color.Red)
+            SmallBiometricCard(
+                strings.bloodPressure,
+                if (viewModel.bloodPressureHigh > 0 && viewModel.bloodPressureLow > 0) {
+                    "${viewModel.bloodPressureHigh}/${viewModel.bloodPressureLow}"
+                } else {
+                    "Sin datos"
+                },
+                if (viewModel.bloodPressureHigh > 0 && viewModel.bloodPressureLow > 0) "mmHg" else "",
+                Modifier.weight(1f),
+                Color.Red
+            )
         }
         
         Spacer(modifier = Modifier.height(80.dp))
@@ -104,7 +147,7 @@ fun StatusScreen(viewModel: BiometricViewModel) {
 }
 
 @Composable
-fun BodySilhouette(muscles: List<MuscleData>, isBack: Boolean) {
+fun BodySilhouette(muscles: List<MuscleData>, isBack: Boolean, hasMeasurements: Boolean = true) {
     val colors = LocalAppColors.current
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
@@ -114,7 +157,9 @@ fun BodySilhouette(muscles: List<MuscleData>, isBack: Boolean) {
         drawCircle(colors.text, headRadius, Offset(w/2, 40f), style = Stroke(2f))
         
         // Front view muscles
-        if (!isBack) {
+        if (!hasMeasurements) {
+            drawRect(colors.subText.copy(alpha = 0.12f), Offset(w / 2 - 35f, 75f), Size(70f, 190f))
+        } else if (!isBack) {
             val chestFatigue = muscles.find { it.id == "chest" }?.fatigue ?: 0f
             drawMusclePart(getFatigueColor(chestFatigue), Offset(w/2 - 35f, 75f), Size(70f, 90f))
             
@@ -130,13 +175,13 @@ fun BodySilhouette(muscles: List<MuscleData>, isBack: Boolean) {
             val thighRFatigue = muscles.find { it.id == "thigh_r" }?.fatigue ?: 0f
             drawMusclePart(getFatigueColor(thighRFatigue), Offset(w/2 + 3f, 175f), Size(32f, 90f))
         } else {
-            // Back view muscles (mocked for now as we don't have separate back data yet)
-            drawMusclePart(getFatigueColor(10f), Offset(w/2 - 35f, 75f), Size(70f, 90f)) // Back/Lats
-            drawMusclePart(getFatigueColor(5f), Offset(w/2 - 35f, 175f), Size(32f, 90f)) // Hamstrings L
-            drawMusclePart(getFatigueColor(5f), Offset(w/2 + 3f, 175f), Size(32f, 90f)) // Hamstrings R
+            // Back view muscles
+            drawMusclePart(getFatigueColor(0f), Offset(w/2 - 35f, 75f), Size(70f, 90f))
+            drawMusclePart(getFatigueColor(0f), Offset(w/2 - 35f, 175f), Size(32f, 90f))
+            drawMusclePart(getFatigueColor(0f), Offset(w/2 + 3f, 175f), Size(32f, 90f))
         }
         
-        // Outline (simplified)
+        // Outline
         drawRect(colors.text, Offset(w/2 - 35f, 75f), Size(70f, 90f), style = Stroke(2f))
     }
 }
@@ -183,65 +228,167 @@ fun LegendItem(label: String, color: Color) {
 }
 
 @Composable
-fun ActiveSensorsPanel(state: BluetoothState, onSearchClick: () -> Unit) {
+fun ActiveSensorsPanel(
+    viewModel: BiometricViewModel,
+    onSearchClick: () -> Unit
+) {
     val colors = LocalAppColors.current
+    val bluetoothState by viewModel.bluetoothState.collectAsStateWithLifecycle()
+    val physicalSensors by viewModel.physicalSensors.collectAsStateWithLifecycle()
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("Sensores Activos", color = colors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Estado Real de Sensores Físicos",
+                color = colors.text,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            if (bluetoothState is BluetoothState.Connected) {
+                TextButton(onClick = { viewModel.disconnectBluetooth() }) {
+                    Text("Desconectar", color = Color.Red, fontSize = 12.sp)
+                }
+            } else if (bluetoothState is BluetoothState.Scanning) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = colors.accent,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                TextButton(onClick = onSearchClick) {
+                    Text("Buscar BLE", color = colors.accent, fontSize = 12.sp)
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
-        
-        when (state) {
-            is BluetoothState.Connected -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground)
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Bluetooth, null, tint = colors.accent)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text("Lession-Band-X1", color = colors.text, fontWeight = FontWeight.Medium)
-                            Text("Conectado - Batería 85%", color = colors.subText, fontSize = 12.sp)
+
+        // Render each physical sensor in order
+        physicalSensors.forEach { sensor ->
+            PhysicalSensorItemCard(sensor = sensor, colors = colors)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (bluetoothState !is BluetoothState.Connected && bluetoothState !is BluetoothState.Scanning) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(
+                onClick = onSearchClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.accent,
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Buscar Dispositivo Principal (ESP32)", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun PhysicalSensorItemCard(sensor: PhysicalSensorInfo, colors: AppColors) {
+    val state = sensor.connectionState
+    val isConnected = state == SensorConnectionState.CONNECTED
+    val isMain = sensor.isMainDevice
+
+    val sensorIcon = when (sensor.id) {
+        "esp32" -> Icons.Default.Memory
+        "max30102" -> Icons.Default.Favorite
+        "mpu6050" -> Icons.Default.DirectionsRun
+        "mlx90614" -> Icons.Default.Thermostat
+        "max30205" -> Icons.Default.DeviceThermostat
+        "myoware" -> Icons.Default.FitnessCenter
+        else -> Icons.Default.Sensors
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isMain && isConnected) colors.accent.copy(alpha = 0.12f) else colors.cardBackground
+        ),
+        shape = RoundedCornerShape(12.dp),
+        border = if (isMain) BorderStroke(1.dp, if (isConnected) colors.accent else colors.subText.copy(alpha = 0.3f)) else null
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = state.getColor().copy(alpha = 0.15f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(sensorIcon, contentDescription = null, tint = state.getColor(), modifier = Modifier.size(20.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        sensor.name,
+                        color = colors.text,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    if (isMain) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            color = colors.accent,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                "MAESTRO",
+                                color = Color.Black,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
                         }
-                        Spacer(modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.CheckCircle, null, tint = Color.Green)
                     }
                 }
-            }
-            is BluetoothState.Scanning -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground)
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colors.accent, strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("Buscando dispositivos...", color = colors.text)
-                    }
+                Text(
+                    sensor.description,
+                    color = colors.subText,
+                    fontSize = 11.sp
+                )
+                if (sensor.lastReading != null) {
+                    Text(
+                        "Lectura real: ${sensor.lastReading}",
+                        color = colors.accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
-            is BluetoothState.DeviceFound -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground)
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.BluetoothSearching, null, tint = colors.accent)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("Dispositivo encontrado", color = colors.text)
-                    }
-                }
-            }
-            else -> {
-                Button(
-                    onClick = onSearchClick,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = Color.Black),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Search, null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Buscar dispositivo", fontWeight = FontWeight.Bold)
-                }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // State Badge
+            Surface(
+                color = state.getColor().copy(alpha = 0.15f),
+                shape = RoundedCornerShape(6.dp),
+                border = BorderStroke(1.dp, state.getColor())
+            ) {
+                Text(
+                    text = state.getLabel(),
+                    color = state.getColor(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                )
             }
         }
     }

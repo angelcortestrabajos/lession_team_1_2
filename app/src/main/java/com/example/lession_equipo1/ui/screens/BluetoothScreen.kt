@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lession_equipo1.BiometricViewModel
 import com.example.lession_equipo1.network.BluetoothState
 import com.example.lession_equipo1.network.DiscoveredBluetoothDevice
@@ -36,14 +37,14 @@ import com.example.lession_equipo1.ui.LocalAppColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
-    val state by viewModel.bluetoothState.collectAsState()
-    val scannedDevices by viewModel.scannedDevices.collectAsState()
-    val connectedDevice by viewModel.connectedDevice.collectAsState()
-    val receivedData by viewModel.receivedData.collectAsState()
+    val state by viewModel.bluetoothState.collectAsStateWithLifecycle()
+    val scannedDevices by viewModel.scannedDevices.collectAsStateWithLifecycle()
+    val connectedDevice by viewModel.connectedDevice.collectAsStateWithLifecycle()
+    val receivedData by viewModel.receivedData.collectAsStateWithLifecycle()
     val emgSession = viewModel.emgSession
     val latestEmgSample = emgSession.latestSample
-    val supportsEmg by viewModel.supportsEmgCommands.collectAsState()
-    val commandError by viewModel.commandError.collectAsState()
+    val supportsEmg by viewModel.supportsEmgCommands.collectAsStateWithLifecycle()
+    val commandError by viewModel.commandError.collectAsStateWithLifecycle()
     val colors = LocalAppColors.current
 
     val context = LocalContext.current
@@ -127,7 +128,7 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
                         when {
-                            state is BluetoothState.Connected -> "Fuente activa: sensor BLE real"
+                            state is BluetoothState.Connected -> "Dispositivo BLE conectado"
                             state is BluetoothState.Connecting -> "Estado del sensor: conectando"
                             state is BluetoothState.Scanning -> "Estado del sensor: buscando"
                             state is BluetoothState.Error -> "Estado del sensor: error"

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -65,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 val workoutHistoryViewModel: WorkoutHistoryViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
                 val statisticsViewModel: StatisticsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
 
-                val user by authViewModel.currentUser.collectAsState()
+                val user by authViewModel.currentUser.collectAsStateWithLifecycle()
                 val isDataMissing = user?.let { (it.weight == 0.0) || (it.height == 0.0) || it.sport.isEmpty() } ?: false
                 val currentUserId = user?.uid ?: ""
 
@@ -192,7 +193,7 @@ class MainActivity : ComponentActivity() {
                             }
                             composable("workout_detail/{workoutId}") { backStackEntry ->
                                 val workoutId = backStackEntry.arguments?.getString("workoutId") ?: ""
-                                val history by workoutHistoryViewModel.history.collectAsState()
+                                val history by workoutHistoryViewModel.history.collectAsStateWithLifecycle()
                                 val workout = history.find { it.id == workoutId }
 
                                 if (workout != null) {
@@ -330,7 +331,7 @@ fun LessionTopBar(
     onHistoryClick: () -> Unit
 ) {
     val colors = LocalAppColors.current
-    val notifications by notificationViewModel.notifications.collectAsState()
+    val notifications by notificationViewModel.notifications.collectAsStateWithLifecycle()
     val unreadCount = notifications.count { !it.isRead }
 
     CenterAlignedTopAppBar(

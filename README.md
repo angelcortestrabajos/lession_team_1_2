@@ -25,6 +25,21 @@ no se envían comandos de inicio o detención de adquisición que el firmware no
 La prueba física requiere el ESP32-C3 y no se considera aprobada por una compilación o
 prueba unitaria.
 
+## Fuentes de datos y límites actuales
+
+La integración BLE implementada recibe muestras EMG JSON del ESP32-C3, frecuencia cardíaca
+del perfil GATT estándar `0x180D/0x2A37` y batería `0x180F/0x2A19`. Inicio y estadísticas no
+interpretan esos servicios como prueba de que haya datos: la conexión y la recepción reciente
+se muestran por separado. Las estadísticas escuchan los cambios del historial persistido en
+Firestore y etiquetan los registros como BLE o demostración.
+
+El firmware/protocolo actual no entrega mediciones BLE procesadas para SpO₂, estabilidad,
+presión arterial ni temperaturas; esas métricas aparecen como «Sin datos» y no se usan para
+afirmar que esos sensores estén conectados. El valor EMG tampoco se convierte a fatiga ni a
+riesgo clínico. La simulación es una fuente de demostración separada. No hay configuración
+Wi-Fi ni restablecimiento general de preferencias implementados en Ajustes. La conexión y
+reconexión física deben validarse con el ESP32-C3; una compilación no demuestra su operación.
+
 ## Firebase setup
 
 To build and run the app locally, add the Firebase Android configuration file from your Firebase project at `app/google-services.json`. This file is ignored by Git and must not be committed.

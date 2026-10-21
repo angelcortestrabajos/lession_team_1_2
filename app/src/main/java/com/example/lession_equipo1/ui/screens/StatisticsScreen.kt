@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lession_equipo1.BiometricViewModel
 import com.example.lession_equipo1.model.HistoryEntry
 import com.example.lession_equipo1.ui.LocalAppColors
@@ -44,17 +45,16 @@ fun StatisticsScreen(
 ) {
     val colors = LocalAppColors.current
     val strings = LocalStrings.current
-    val state by statsViewModel.uiState.collectAsState()
-    
-    val risk = biometricViewModel.riskLevel
-    val stateColor = when {
-        risk < 40 -> Color.Green
-        risk < 75 -> Color.Yellow
-        else -> Color.Red
-    }
+    val state by statsViewModel.uiState.collectAsStateWithLifecycle()
+    val dataSourceState by biometricViewModel.dataSourceState.collectAsStateWithLifecycle()
+
+    val stateColor = state.avgRisk?.let { getStatusColor(it.toFloat()) } ?: colors.subText
 
     LaunchedEffect(userId) {
         statsViewModel.loadData(userId)
+    }
+    DisposableEffect(statsViewModel) {
+        onDispose { statsViewModel.stopLoading() }
     }
 
     Column(
@@ -71,6 +71,13 @@ fun StatisticsScreen(
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.fillMaxWidth()
+        )
+
+        Text(
+            text = "Fuente en vivo: ${dataSourceState.getLabel()} · Las estadísticas muestran historial guardado.",
+            color = colors.subText,
+            fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -106,32 +113,71 @@ fun StatisticsScreen(
         Spacer(modifier = Modifier.height(16.dp))
         
         // Dynamic Summary Banner
-        SummaryBanner(state.mostFrequentState, state.trendMessage)
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Summary Cards
-        Row(modifier = Modifier.fillMaxWidth()) {
-            SummaryCard("Riesgo Promedio", "${state.avgRisk}%", getStatusColor(state.avgRisk.toFloat()), Modifier.weight(1f))
-            Spacer(modifier = Modifier.width(8.dp))
-            SummaryCard("FC Promedio", "${state.avgHeartRate}", Color.Red, Modifier.weight(1f))
-            Spacer(modifier = Modifier.width(8.dp))
-            SummaryCard("Fatiga Media", "${state.avgFatigue}%", Color.Yellow, Modifier.weight(1f))
+        if (state.errorMessage == null && state.entries.isNotEmpty()) {
+            Text(
+                "Promedios del historial guardado",
+                color = colors.text,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            )
+            SummaryBanner(state.mostFrequentState ?: "Sin datos", state.trendMessage)
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                SummaryCard(
+                    "Riesgo Promedio",
+                    state.avgRisk?.let { "$it%" } ?: "Sin datos",
+                    state.avgRisk?.let { getStatusColor(it.toFloat()) } ?: colors.subText,
+                    Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                SummaryCard(
+                    "FC Promedio",
+                    state.avgHeartRate?.toString() ?: "Sin datos",
+                    Color.Red,
+                    Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                SummaryCard(
+                    "Fatiga Media",
+                    state.avgFatigue?.let { "$it%" } ?: "Sin datos",
+                    Color.Yellow,
+                    Modifier.weight(1f)
+                )
+            }
+            Surface(
+                color = colors.surface,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Rangos y cantidad", color = colors.text, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Mediciones: ${state.entries.size} · FC mín/máx: " +
+                            "${state.minHeartRate ?: "Sin datos"}/${state.maxHeartRate ?: "Sin datos"} BPM",
+                        color = colors.subText,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        "Fatiga mín/máx: ${state.minFatigue?.let { "$it%" } ?: "Sin datos"}/" +
+                            "${state.maxFatigue?.let { "$it%" } ?: "Sin datos"} · Riesgo mín/máx: " +
+                            "${state.minRisk?.let { "$it%" } ?: "Sin datos"}/" +
+                            (state.maxRisk?.let { "$it%" } ?: "Sin datos"),
+                        color = colors.subText,
+                        fontSize = 12.sp
+                    )
+                }
+            }
         }
         
         Spacer(modifier = Modifier.height(24.dp))
 
-        if (state.isLoading) {
+        if (state.isLoading && state.entries.isEmpty()) {
             CircularProgressIndicator(color = colors.accent)
+        } else if (state.errorMessage != null) {
+            Text(state.errorMessage.orEmpty(), color = Color.Red)
         } else if (state.entries.isEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No hay mediciones para este periodo", color = colors.subText)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(onClick = { /* Nav to start monitoring */ }, colors = ButtonDefaults.buttonColors(containerColor = colors.accent)) {
-                        Text("Iniciar Monitoreo", color = Color.Black)
-                    }
-                }
+                Text("No hay mediciones válidas para este periodo", color = colors.subText)
             }
         } else {
             // Charts Section
@@ -141,11 +187,17 @@ fun StatisticsScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             val chartData = remember(state.entries, selectedMetric) {
+                val chartEntries = state.entries.takeLast(200)
                 when (selectedMetric) {
-                    "Riesgo" -> state.entries.map { it.riskLevel.toFloat() }
-                    "Pulso" -> state.entries.map { it.heartRate.toFloat() }
-                    "Temp" -> state.entries.map { it.temperature.toFloat() }
-                    else -> state.entries.map { it.fatigue.toFloat() }
+                    "Riesgo" -> chartEntries.filter {
+                        it.riskAvailable && it.riskLevel.isFinite() && it.riskLevel in 0.0..100.0
+                    }.map { it.riskLevel.toFloat() }
+                    "Pulso" -> chartEntries.map { it.heartRate.toFloat() }
+                    "Temp" -> chartEntries.filter { it.temperatureAvailable }
+                        .map { it.temperature.toFloat() }.filter { it in 20f..45f }
+                    else -> chartEntries.filter {
+                        it.fatigueAvailable && it.fatigue.isFinite() && it.fatigue in 0.0..100.0
+                    }.map { it.fatigue.toFloat() }
                 }
             }
             
@@ -160,17 +212,21 @@ fun StatisticsScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Objectives Summary
+            // Persisted history, not synthetic objective values.
             Surface(
                 color = colors.surface,
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Cumplimiento de Objetivos", color = colors.text, fontWeight = FontWeight.Bold)
+                    Text("Historial persistido", color = colors.text, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    ObjectiveItem("Control de Riesgo", if (state.avgRisk < 40) 1.0f else 0.5f, if (state.avgRisk < 40) Color.Green else Color.Red)
-                    ObjectiveItem("Frecuencia Cardíaca", 0.85f, Color.Red)
+                    val bleCount = state.entries.count { it.deviceId == "BLE" }
+                    val demoCount = state.entries.count { it.deviceId == "SIMULATION" }
+                    Text(
+                        "${state.entries.size} válidas · BLE: $bleCount · demostración: $demoCount",
+                        color = colors.subText
+                    )
                 }
             }
 
@@ -277,7 +333,10 @@ fun HistoricalEntryItem(entry: HistoryEntry) {
     val colors = LocalAppColors.current
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     val timeStr = sdf.format(entry.timestamp.toDate())
-    val color = getStatusColor(entry.riskLevel.toFloat())
+    val hasRisk = entry.riskAvailable &&
+        entry.riskLevel.isFinite() &&
+        entry.riskLevel in 0.0..100.0
+    val color = if (hasRisk) getStatusColor(entry.riskLevel.toFloat()) else colors.subText
     
     var expanded by remember { mutableStateOf(false) }
 
@@ -290,6 +349,12 @@ fun HistoricalEntryItem(entry: HistoryEntry) {
                 Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(timeStr, color = colors.text, fontWeight = FontWeight.Bold)
+                val sourceLabel = when (entry.deviceId) {
+                    "SIMULATION" -> "Demostración"
+                    "BLE" -> "BLE"
+                    else -> "Origen no especificado"
+                }
+                Text(sourceLabel, color = colors.subText, fontSize = 10.sp)
                 if (entry.activityType.isNotEmpty()) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Box(modifier = Modifier.background(colors.accent.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp)) {
@@ -306,10 +371,29 @@ fun HistoricalEntryItem(entry: HistoryEntry) {
                     HorizontalDivider(color = colors.subText.copy(alpha = 0.1f))
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        MetricDetail("Riesgo", "${entry.riskLevel.toInt()}%")
-                        MetricDetail("Fatiga", "${entry.fatigue.toInt()}%")
-                        MetricDetail("Temp", "${entry.temperature}°C")
-                        MetricDetail("Presión", "${entry.bpSystolic}/${entry.bpDiastolic}")
+                        MetricDetail("Riesgo", if (hasRisk) "${entry.riskLevel.toInt()}%" else "Sin datos")
+                        MetricDetail(
+                            "Fatiga",
+                            if (
+                                entry.fatigueAvailable && entry.fatigue.isFinite() &&
+                                entry.fatigue in 0.0..100.0
+                            ) "${entry.fatigue.toInt()}%" else "Sin datos"
+                        )
+                        MetricDetail(
+                            "Temp",
+                            if (
+                                entry.temperatureAvailable && entry.temperature.isFinite() &&
+                                entry.temperature in 20.0..45.0
+                            ) "${entry.temperature}°C" else "Sin datos"
+                        )
+                        MetricDetail(
+                            "Presión",
+                            if (
+                                entry.bloodPressureAvailable &&
+                                entry.bpSystolic in 40..300 &&
+                                entry.bpDiastolic in 20..200
+                            ) "${entry.bpSystolic}/${entry.bpDiastolic}" else "Sin datos"
+                        )
                     }
                 }
             }
@@ -365,7 +449,15 @@ fun ChartCard(title: String, data: List<Float>, color: Color) {
             Text(title, color = colors.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
             Box(modifier = Modifier.fillMaxSize()) {
-                SimpleLineChart(data, color)
+                if (data.isEmpty()) {
+                    Text(
+                        "Sin datos válidos para esta métrica",
+                        color = colors.subText,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                } else {
+                    SimpleLineChart(data, color)
+                }
             }
         }
     }
@@ -374,11 +466,16 @@ fun ChartCard(title: String, data: List<Float>, color: Color) {
 @Composable
 fun SimpleLineChart(data: List<Float>, color: Color) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        if (data.size < 2) return@Canvas
+        if (data.isEmpty()) return@Canvas
         val maxVal = data.maxOrNull()?.coerceAtLeast(1f) ?: 1f
         val minVal = data.minOrNull() ?: 0f
         val range = (maxVal - minVal).coerceAtLeast(1f)
-        
+        if (data.size == 1) {
+            val y = size.height - ((data.first() - minVal) / range * size.height)
+            drawCircle(color, 4.dp.toPx(), Offset(size.width / 2f, y))
+            return@Canvas
+        }
+
         val stepX = size.width / (data.size - 1)
         val path = Path()
         

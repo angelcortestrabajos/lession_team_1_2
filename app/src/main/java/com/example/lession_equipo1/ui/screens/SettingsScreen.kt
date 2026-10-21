@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lession_equipo1.BiometricViewModel
 import com.example.lession_equipo1.network.BluetoothState
 import com.example.lession_equipo1.ui.AppConfigViewModel
@@ -43,6 +44,17 @@ fun SettingsScreen(
 ) {
     val strings = stringResource()
     val colors = LocalAppColors.current
+    val bluetoothStateState = biometricViewModel
+        ?.bluetoothState
+        ?.collectAsStateWithLifecycle()
+    val bluetoothState = bluetoothStateState?.value ?: BluetoothState.Idle
+    val connectionLabel = when (val state = bluetoothState) {
+        is BluetoothState.Connected -> "Conectado"
+        is BluetoothState.Connecting -> "Conectando"
+        is BluetoothState.Scanning -> "Buscando dispositivos"
+        is BluetoothState.Error -> "Error de conexión: ${state.message}"
+        else -> "Desconectado"
+    }
 
     Scaffold(
         containerColor = colors.background,
@@ -96,15 +108,26 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Gestión de Sensores BLE",
+                            text = "Conectar sensores BLE",
                             color = colors.text,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
                         Text(
-                            text = "Buscar y conectar bandas biométricas compatibles",
+                            text = "Buscar dispositivos BLE con perfiles de frecuencia cardíaca o EMG",
                             color = colors.subText,
                             fontSize = 12.sp
+                        )
+                        Text(
+                            text = "Estado: $connectionLabel",
+                            color = when (bluetoothState) {
+                                is BluetoothState.Connected -> Color(0xFF2E7D32)
+                                is BluetoothState.Connecting, is BluetoothState.Scanning -> Color(0xFFF57F17)
+                                is BluetoothState.Error -> Color(0xFFC62828)
+                                else -> colors.subText
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                     Icon(Icons.Default.ChevronRight, contentDescription = null, tint = colors.subText)
@@ -116,7 +139,6 @@ fun SettingsScreen(
             // Sección 2: Control de Simulación
             if (biometricViewModel != null) {
                 val isSimulating = biometricViewModel.isSimulating
-                val bluetoothState by biometricViewModel.bluetoothState.collectAsState()
                 val isBleConnected = bluetoothState is BluetoothState.Connected
 
                 Text(
@@ -163,7 +185,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = if (isSimulating) {
-                                "La simulación genera mediciones biométricas periódicas en segundo plano."
+                                    "La simulación genera mediciones de demostración mientras la app está activa."
                             } else {
                                 "La simulación está completamente pausada. No se generan ni envían datos simulados."
                             },
@@ -206,7 +228,10 @@ fun SettingsScreen(
 
                             Button(
                                 onClick = { biometricViewModel.startSimulation(userId) },
-                                enabled = !isSimulating,
+                                enabled = !isSimulating && (
+                                    bluetoothState is BluetoothState.Idle ||
+                                        bluetoothState is BluetoothState.Error
+                                    ),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = colors.accent,
                                     contentColor = Color.Black,

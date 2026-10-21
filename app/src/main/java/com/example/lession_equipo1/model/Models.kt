@@ -49,7 +49,11 @@ data class HistoryEntry(
     @get:PropertyName("risk_state") var riskState: String = "Óptimo",
     @get:PropertyName("activity_type") var activityType: String = "",
     var timestamp: Timestamp = Timestamp.now(),
-    @get:PropertyName("device_id") var deviceId: String = ""
+    @get:PropertyName("device_id") var deviceId: String = "",
+    @get:PropertyName("risk_available") var riskAvailable: Boolean = false,
+    @get:PropertyName("fatigue_available") var fatigueAvailable: Boolean = false,
+    @get:PropertyName("temperature_available") var temperatureAvailable: Boolean = false,
+    @get:PropertyName("blood_pressure_available") var bloodPressureAvailable: Boolean = false
 )
 
 data class LessionNotification(
@@ -149,3 +153,59 @@ data class TrainingGoal(
 enum class GoalCategory {
     WORKOUT_COUNT, DURATION, CALORIES, DISTANCE, HEART_RATE, FATIGUE_REDUCTION, RISK_CONTROL
 }
+
+enum class SensorConnectionState {
+    CONNECTED,
+    DISCONNECTED,
+    CONNECTING,
+    ERROR;
+
+    fun getLabel(): String = when(this) {
+        CONNECTED -> "Conectado"
+        DISCONNECTED -> "Desconectado"
+        CONNECTING -> "Conectando"
+        ERROR -> "Error de conexión"
+    }
+
+    fun getColor(): Color = when(this) {
+        CONNECTED -> Color(0xFF2E7D32)
+        DISCONNECTED -> Color(0xFF757575)
+        CONNECTING -> Color(0xFFF57F17)
+        ERROR -> Color(0xFFC62828)
+    }
+}
+
+enum class DataSourceState {
+    SIMULATION_ACTIVE,
+    REAL_SENSORS_ACTIVE,
+    CONNECTED_NO_DATA,
+    SENSORS_DISCONNECTED,
+    COMMUNICATION_ERROR;
+
+    fun getLabel(): String = when(this) {
+        SIMULATION_ACTIVE -> "Simulación activa"
+        REAL_SENSORS_ACTIVE -> "Sensores reales activos"
+        CONNECTED_NO_DATA -> "Conectado · Esperando datos válidos"
+        SENSORS_DISCONNECTED -> "Sensores desconectados"
+        COMMUNICATION_ERROR -> "Error de comunicación"
+    }
+
+    fun getColor(): Color = when(this) {
+        SIMULATION_ACTIVE -> Color(0xFFF57F17)
+        REAL_SENSORS_ACTIVE -> Color(0xFF2E7D32)
+        CONNECTED_NO_DATA -> Color(0xFF0288D1)
+        SENSORS_DISCONNECTED -> Color(0xFF757575)
+        COMMUNICATION_ERROR -> Color(0xFFC62828)
+    }
+}
+
+data class PhysicalSensorInfo(
+    val id: String,
+    val name: String,
+    val description: String,
+    val connectionState: SensorConnectionState,
+    val protocol: String = "Bluetooth LE",
+    val lastSeenMs: Long = 0L,
+    val lastReading: String? = null,
+    val isMainDevice: Boolean = false
+)
