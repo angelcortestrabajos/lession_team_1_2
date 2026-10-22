@@ -21,8 +21,19 @@ class UserPreferencesRepository(private val context: Context) {
     private object PreferencesKeys {
         val IS_ENGLISH = booleanPreferencesKey("is_english")
         val IS_DARK_MODE = booleanPreferencesKey("is_dark_mode")
+        val EMG_REFERENCE_REST_MV = floatPreferencesKey("emg_reference_rest_mv")
         val EMG_REFERENCE_MAX_MV = floatPreferencesKey("emg_reference_max_mv")
     }
+
+    val emgReferenceRestMvFlow: Flow<Float?> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences -> preferences[PreferencesKeys.EMG_REFERENCE_REST_MV] }
 
     val emgReferenceMaxMvFlow: Flow<Float?> = context.dataStore.data
         .catch { exception ->
@@ -74,10 +85,12 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun setEmgReferenceMaxMv(value: Float) {
-        require(value.isFinite() && value > 0f)
+    suspend fun setEmgCalibration(restMv: Float, maximumMv: Float) {
+        require(restMv.isFinite() && restMv >= 0f)
+        require(maximumMv.isFinite() && maximumMv > restMv)
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.EMG_REFERENCE_MAX_MV] = value
+            preferences[PreferencesKeys.EMG_REFERENCE_REST_MV] = restMv
+            preferences[PreferencesKeys.EMG_REFERENCE_MAX_MV] = maximumMv
         }
     }
 }

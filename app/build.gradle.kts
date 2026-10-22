@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.lession_equipo1"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "3.0.0"
+        versionCode = 4
+        versionName = "3.1.0"
 
         val supabaseUrl = project.findProperty("supabaseUrl") as? String ?: "https://agcnpznjwzsukzvrmvrk.supabase.co"
         val supabaseKey = project.findProperty("supabaseKey") as? String ?: "sb_publishable_xE2W7YWVEmOF0q_XygMViQ_pReB3oto"

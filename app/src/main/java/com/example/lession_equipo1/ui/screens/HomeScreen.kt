@@ -17,7 +17,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,7 +46,6 @@ fun HomeScreen(
     val dataSourceState by viewModel.dataSourceState.collectAsStateWithLifecycle()
     val strings = LocalStrings.current
     val colors = LocalAppColors.current
-    val context = LocalContext.current
     var showDialog by remember(isDataMissing) { mutableStateOf(isDataMissing) }
     val lastNotification by viewModel.notifications.collectAsStateWithLifecycle(initialValue = "")
 
@@ -302,7 +300,7 @@ fun HomeScreen(
                 Text(
                     "EMG: ${emgSession.latestSample?.let { "%.1f".format(it.valueMv) } ?: "--"} mV · " +
                         "ADC: ${emgSession.latestSample?.adcRaw?.toString() ?: "--"} · " +
-                        "Rendimiento: ${emgSession.performancePercent?.let { "%.0f".format(it) } ?: "--"}%",
+                        "Esfuerzo: ${emgSession.performancePercent?.let { "%.0f".format(it) } ?: "--"}%",
                     color = colors.subText,
                     fontSize = 13.sp
                 )
@@ -318,9 +316,6 @@ fun HomeScreen(
                     ) {
                         Text(if (isSimulating) "Detener simulación" else "Iniciar simulación")
                     }
-                    viewModel.emgReferenceSaveError?.let { error ->
-                        Text(error, color = Color.Red, fontSize = 12.sp)
-                    }
                     OutlinedButton(
                         onClick = { viewModel.resetEmgSession() },
                         modifier = Modifier.weight(1f)
@@ -330,23 +325,16 @@ fun HomeScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = {
-                            if (!viewModel.setEmgMaximumReference()) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Se necesita una muestra EMG real válida para fijar el máximo.",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
+                        onClick = onBluetoothClick,
                         enabled = bluetoothState is com.example.lession_equipo1.network.BluetoothState.Connected &&
                             supportsEmg,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Máximo")
+                        Text("Calibrar")
                     }
                     Text(
-                        "Referencia: ${emgSession.referenceMaxMv?.let { "%.1f".format(it) } ?: "--"} mV",
+                        "Reposo: ${emgSession.referenceRestMv?.let { "%.1f".format(it) } ?: "--"} · " +
+                            "Umbral: ${emgSession.referenceMaxMv?.let { "%.1f".format(it) } ?: "--"} mV",
                         color = colors.subText,
                         modifier = Modifier.weight(1f).align(Alignment.CenterVertically)
                     )

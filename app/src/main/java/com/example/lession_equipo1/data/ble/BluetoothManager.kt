@@ -716,7 +716,7 @@ class BluetoothManager(context: Context) {
                     val status = json.optString("status")
                     if (
                         sensor != "emg_module" ||
-                        metric != "emgEnvelope" ||
+                        metric != "emgSignal" ||
                         unit != "mV" ||
                         status != "valid" ||
                         !json.has("value") ||
@@ -762,7 +762,7 @@ class BluetoothManager(context: Context) {
     fun sendCommand(command: String) {
         val allowedCommands = setOf(
             "READ_DATA", "LED_RED_ON", "LED_RED_OFF", "LED_BLUE_ON",
-            "LED_BLUE_OFF", "LED_YELLOW_ON", "LED_YELLOW_OFF", "ALL_OFF", "ALL_ON"
+            "LED_BLUE_OFF", "LED_GREEN_ON", "LED_GREEN_OFF", "ALL_OFF", "ALL_ON"
         )
         val characteristic = emgCharacteristic
         val bluetoothGatt = gatt

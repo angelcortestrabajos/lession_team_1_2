@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" role="img" aria-labelledby="title desc">
+  <title id="title">Esquema de las pantallas de Lession para medir EMG</title>
+  <desc id="desc">Ilustración aproximada de Inicio, gestión Bluetooth y el diálogo de calibración en reposo y esfuerzo máximo.</desc>
+  <rect width="1100" height="560" rx="24" fill="#f4f2ff"/>
+  <text x="38" y="49" fill="#28127e" font-family="Arial,sans-serif" font-size="25" font-weight="700">Recorrido en la app (esquema orientativo)</text>
+  <text x="38" y="76" fill="#4c4770" font-family="Arial,sans-serif" font-size="15">Las pantallas reales pueden variar según la versión y el estado de conexión.</text>
+
+  <g font-family="Arial,sans-serif">
+    <rect x="48" y="103" width="292" height="410" rx="28" fill="#fff" stroke="#4025c6" stroke-width="3"/>
+    <rect x="62" y="121" width="264" height="34" rx="12" fill="#200f78"/>
+    <text x="80" y="144" fill="#fff" font-size="17" font-weight="700">LESSION · Inicio</text>
+    <text x="75" y="187" fill="#28127e" font-size="17" font-weight="700">Estado del sensor</text>
+    <text x="75" y="211" fill="#4c4770" font-size="14">Conecta el ESP32-C3-EMG</text>
+    <rect x="74" y="232" width="234" height="48" rx="12" fill="#e8ff2f"/>
+    <text x="124" y="262" fill="#28127e" font-size="17" font-weight="700">Calibrar</text>
+    <rect x="74" y="298" width="234" height="77" rx="12" fill="#f4f2ff"/>
+    <text x="90" y="325" fill="#28127e" font-size="15" font-weight="700">EMG: -- mV</text>
+    <text x="90" y="350" fill="#4c4770" font-size="14">Esfuerzo: -- %</text>
+    <rect x="74" y="391" width="234" height="86" rx="12" fill="#fff" stroke="#d5cffa"/>
+    <path d="M89 453 L124 436 L155 448 L190 416 L220 432 L263 404 L293 414" fill="none" stroke="#4025c6" stroke-width="4"/>
+    <text x="87" y="418" fill="#4c4770" font-size="13">Señal EMG (cuando hay datos)</text>
+
+    <path d="M360 300 L406 300" fill="none" stroke="#4025c6" stroke-width="4"/>
+    <path d="M406 300 L393 291 M406 300 L393 309" fill="none" stroke="#4025c6" stroke-width="4"/>
+
+    <rect x="420" y="103" width="292" height="410" rx="28" fill="#fff" stroke="#4025c6" stroke-width="3"/>
+    <rect x="434" y="121" width="264" height="34" rx="12" fill="#200f78"/>
+    <text x="450" y="144" fill="#fff" font-size="16" font-weight="700">Gestión de sensores BLE</text>
+    <text x="448" y="187" fill="#28127e" font-size="16" font-weight="700">1. Buscar y conectar</text>
+    <rect x="446" y="201" width="240" height="48" rx="12" fill="#e8ff2f"/>
+    <text x="463" y="231" fill="#28127e" font-size="14" font-weight="700">Buscar sensores BLE</text>
+    <rect x="446" y="265" width="240" height="54" rx="12" fill="#f4f2ff"/>
+    <text x="462" y="288" fill="#28127e" font-size="14" font-weight="700">ESP32-C3-EMG</text>
+    <text x="462" y="308" fill="#4c4770" font-size="12">Toca el dispositivo para conectar</text>
+    <text x="448" y="353" fill="#28127e" font-size="15" font-weight="700">2. Con el sensor conectado</text>
+    <rect x="446" y="367" width="240" height="48" rx="12" fill="#e8ff2f"/>
+    <text x="514" y="397" fill="#28127e" font-size="15" font-weight="700">Calibrar</text>
+    <text x="448" y="449" fill="#4c4770" font-size="13">Reposo · Máximo · Gráfica</text>
+    <text x="448" y="472" fill="#4c4770" font-size="13">LED rojo · verde · azul</text>
+
+    <path d="M733 300 L779 300" fill="none" stroke="#4025c6" stroke-width="4"/>
+    <path d="M779 300 L766 291 M779 300 L766 309" fill="none" stroke="#4025c6" stroke-width="4"/>
+
+    <rect x="794" y="103" width="258" height="410" rx="28" fill="#fff" stroke="#4025c6" stroke-width="3"/>
+    <rect x="811" y="150" width="224" height="320" rx="16" fill="#f4f2ff" stroke="#d5cffa" stroke-width="2"/>
+    <text x="830" y="184" fill="#28127e" font-size="18" font-weight="700">Calibración</text>
+    <text x="830" y="220" fill="#4c4770" font-size="14" font-weight="700">A. Reposo</text>
+    <text x="830" y="246" fill="#4c4770" font-size="13">Relaja el músculo</text>
+    <rect x="828" y="261" width="188" height="44" rx="10" fill="#e8ff2f"/>
+    <text x="850" y="288" fill="#28127e" font-size="14" font-weight="700">Capturar reposo</text>
+    <text x="830" y="339" fill="#4c4770" font-size="14" font-weight="700">B. Esfuerzo máximo</text>
+    <text x="830" y="365" fill="#4c4770" font-size="13">Contracción firme, sin dolor</text>
+    <rect x="828" y="380" width="188" height="44" rx="10" fill="#e8ff2f"/>
+    <text x="843" y="407" fill="#28127e" font-size="14" font-weight="700">Capturar máximo</text>
+    <text x="830" y="448" fill="#4c4770" font-size="12">20 lecturas · aprox. 2 s cada paso</text>
+  </g>
+</svg>

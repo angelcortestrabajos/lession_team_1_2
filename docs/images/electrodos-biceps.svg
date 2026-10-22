@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440" role="img" aria-labelledby="title desc">
+  <title id="title">Esquema orientativo de electrodos en el bíceps</title>
+  <desc id="desc">Dibujo de un brazo flexionado con dos electrodos de señal alineados sobre el bíceps y un electrodo de referencia en una zona ósea cercana. Confirmar la posición con las instrucciones del módulo.</desc>
+  <rect width="900" height="440" rx="24" fill="#f4f2ff"/>
+  <text x="40" y="54" fill="#28127e" font-family="Arial,sans-serif" font-size="26" font-weight="700">Ejemplo: observar el bíceps</text>
+  <text x="40" y="84" fill="#4c4770" font-family="Arial,sans-serif" font-size="16">Orientativo; confirma señales y referencia con el fabricante del EMG.</text>
+
+  <path d="M280 340 C300 294 340 242 400 205 C444 178 484 151 502 119
+           C522 83 560 72 589 91 C615 108 607 140 591 160
+           C575 182 552 198 536 218 C523 235 522 252 538 269
+           C558 291 581 312 599 340
+           C616 366 603 394 578 400 C554 406 540 384 525 362
+           C500 326 479 301 451 288 C413 305 380 342 356 376
+           C339 401 306 403 287 382 C277 370 275 355 280 340 Z"
+        fill="#f1bd9f" stroke="#8f5948" stroke-width="5"/>
+  <path d="M365 293 C394 248 438 218 480 213 C509 210 528 225 529 248
+           C530 272 505 288 481 294 C440 303 410 325 390 347"
+        fill="#e99c82" stroke="#b86c60" stroke-width="3"/>
+  <path d="M585 206 C610 218 631 230 649 248 C665 265 663 280 650 289
+           C639 297 627 289 617 280 L578 249"
+        fill="#f1bd9f" stroke="#8f5948" stroke-width="5"/>
+
+  <circle cx="421" cy="248" r="19" fill="#4025c6" stroke="#fff" stroke-width="5"/>
+  <circle cx="473" cy="226" r="19" fill="#4025c6" stroke="#fff" stroke-width="5"/>
+  <circle cx="631" cy="272" r="19" fill="#e8ff2f" stroke="#625800" stroke-width="4"/>
+
+  <path d="M421 229 L339 151 L117 151" fill="none" stroke="#4025c6" stroke-width="3"/>
+  <path d="M473 207 L520 149 L723 149" fill="none" stroke="#4025c6" stroke-width="3"/>
+  <path d="M650 272 L708 315 L817 315" fill="none" stroke="#716500" stroke-width="3"/>
+
+  <rect x="36" y="122" width="226" height="64" rx="12" fill="#fff" stroke="#4025c6" stroke-width="2"/>
+  <text x="54" y="149" fill="#28127e" font-family="Arial,sans-serif" font-size="17" font-weight="700">Señal 1</text>
+  <text x="54" y="171" fill="#4c4770" font-family="Arial,sans-serif" font-size="14">Sobre la parte carnosa</text>
+
+  <rect x="637" y="115" width="226" height="64" rx="12" fill="#fff" stroke="#4025c6" stroke-width="2"/>
+  <text x="655" y="142" fill="#28127e" font-family="Arial,sans-serif" font-size="17" font-weight="700">Señal 2</text>
+  <text x="655" y="164" fill="#4c4770" font-family="Arial,sans-serif" font-size="14">Alineada con la primera</text>
+
+  <rect x="630" y="293" width="233" height="68" rx="12" fill="#fff" stroke="#8c7a00" stroke-width="2"/>
+  <text x="648" y="321" fill="#625800" font-family="Arial,sans-serif" font-size="17" font-weight="700">Referencia</text>
+  <text x="648" y="344" fill="#4c4770" font-family="Arial,sans-serif" font-size="14">Zona ósea indicada por fabricante</text>
+
+  <text x="40" y="405" fill="#4c4770" font-family="Arial,sans-serif" font-size="14">No colocar sobre articulaciones, piel irritada ni heridas. La referencia exacta depende del módulo.</text>
+</svg>

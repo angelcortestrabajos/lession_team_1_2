@@ -25,15 +25,29 @@ import com.example.lession_equipo1.repository.UserPreferencesRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import java.io.IOException
+
+enum class EmgCalibrationStage {
+    IDLE,
+    REST_PROMPT,
+    CAPTURING_REST,
+    MAXIMUM_PROMPT,
+    CAPTURING_MAXIMUM,
+    COMPLETE
+}
 
 class BiometricViewModel(
     private val firestoreRepository: FirestoreRepository,
@@ -60,8 +74,13 @@ class BiometricViewModel(
     var activeActivity by mutableStateOf("")
     var emgSession by mutableStateOf(EmgSession())
         private set
-    var emgReferenceSaveError by mutableStateOf<String?>(null)
+    var emgCalibrationStage by mutableStateOf(EmgCalibrationStage.IDLE)
         private set
+    var emgCalibrationError by mutableStateOf<String?>(null)
+        private set
+    private var pendingEmgRestMv: Float? = null
+    private var emgCalibrationJob: Job? = null
+    private var emgMaximumAlertActive = false
 
     val riskLevel: Float
         get() {
@@ -204,8 +223,18 @@ class BiometricViewModel(
 
         userPreferencesRepository?.let { preferences ->
             viewModelScope.launch {
-                preferences.emgReferenceMaxMvFlow.collect { reference ->
-                    emgSession = emgSession.copy(referenceMaxMv = reference)
+                combine(
+                    preferences.emgReferenceRestMvFlow,
+                    preferences.emgReferenceMaxMvFlow
+                ) { rest, maximum ->
+                    rest to maximum
+                }.collect { (rest, maximum) ->
+                    val validCalibration = rest != null && maximum != null &&
+                        rest.isFinite() && maximum.isFinite() && maximum > rest
+                    emgSession = emgSession.copy(
+                        referenceRestMv = rest.takeIf { validCalibration },
+                        referenceMaxMv = maximum.takeIf { validCalibration }
+                    )
                 }
             }
         }
@@ -220,6 +249,16 @@ class BiometricViewModel(
                         if (updatedSession !== emgSession) {
                             emgSession = updatedSession
                             latestEmgSampleEpoch = connectionEpoch
+                            if (updatedSession.maximumEffortReached) {
+                                if (!emgMaximumAlertActive) {
+                                    emgMaximumAlertActive = true
+                                    _notifications.emit(
+                                        "Se alcanzó el umbral de esfuerzo máximo calibrado. Reduce la intensidad o descansa."
+                                    )
+                                }
+                            } else {
+                                emgMaximumAlertActive = false
+                            }
                         }
                     }
                 }
@@ -360,29 +399,115 @@ class BiometricViewModel(
     fun resetEmgSession() {
         lastProcessedEmgSequence = bluetoothController.emgSampleSequence.value
         latestEmgSampleEpoch = null
+        emgMaximumAlertActive = false
         emgSession = emgSession.resetSession()
     }
 
-    fun setEmgMaximumReference(): Boolean {
+    fun beginEmgCalibration() {
         if (bluetoothState.value !is BluetoothState.Connected ||
-            !supportsEmgCommands.value ||
-            latestEmgSampleEpoch != connectionEpoch
-        ) return false
-        val currentValue = emgSession.latestSample?.valueMv ?: return false
-        if (currentValue <= 0f || !currentValue.isFinite()) return false
-        emgReferenceSaveError = null
-        emgSession = emgSession.copy(referenceMaxMv = currentValue)
-        userPreferencesRepository?.let { preferences ->
-            viewModelScope.launch {
+            !supportsEmgCommands.value
+        ) {
+            emgCalibrationError = "Conecta primero el módulo EMG para calibrar."
+            return
+        }
+        pendingEmgRestMv = null
+        emgCalibrationError = null
+        emgCalibrationStage = EmgCalibrationStage.REST_PROMPT
+    }
+
+    fun captureEmgRest() {
+        captureEmgCalibrationValue(isRest = true)
+    }
+
+    fun captureEmgMaximum() {
+        captureEmgCalibrationValue(isRest = false)
+    }
+
+    fun closeEmgCalibration() {
+        emgCalibrationJob?.cancel()
+        emgCalibrationJob = null
+        pendingEmgRestMv = null
+        emgCalibrationError = null
+        emgCalibrationStage = EmgCalibrationStage.IDLE
+    }
+
+    private fun captureEmgCalibrationValue(isRest: Boolean) {
+        val expectedStage = if (isRest) {
+            EmgCalibrationStage.REST_PROMPT
+        } else {
+            EmgCalibrationStage.MAXIMUM_PROMPT
+        }
+        if (emgCalibrationStage != expectedStage || emgCalibrationJob?.isActive == true) return
+        if (bluetoothState.value !is BluetoothState.Connected || !supportsEmgCommands.value) {
+            emgCalibrationError = "El sensor EMG se desconectó. Reconéctalo para continuar."
+            return
+        }
+
+        val firstSequence = bluetoothController.emgSampleSequence.value
+        val captureEpoch = connectionEpoch
+        emgCalibrationError = null
+        emgCalibrationStage = if (isRest) {
+            EmgCalibrationStage.CAPTURING_REST
+        } else {
+            EmgCalibrationStage.CAPTURING_MAXIMUM
+        }
+        emgCalibrationJob = viewModelScope.launch {
+            val values = withTimeoutOrNull(5_000L) {
+                bluetoothController.emgSamples
+                    .filter { it.sequence > firstSequence }
+                    .map { it.valueMv }
+                    .take(20)
+                    .toList()
+            }
+            val promptStage = if (isRest) {
+                EmgCalibrationStage.REST_PROMPT
+            } else {
+                EmgCalibrationStage.MAXIMUM_PROMPT
+            }
+            if (values == null || values.size < 15) {
+                emgCalibrationStage = promptStage
+                emgCalibrationError = "No llegaron suficientes muestras EMG válidas. Reintenta con el sensor conectado."
+                return@launch
+            }
+            if (bluetoothState.value !is BluetoothState.Connected || captureEpoch != connectionEpoch) {
+                emgCalibrationStage = promptStage
+                emgCalibrationError = "La conexión BLE cambió durante la captura. Reintenta."
+                return@launch
+            }
+
+            val capturedMv = values.average().toFloat()
+            if (!capturedMv.isFinite()) {
+                emgCalibrationStage = promptStage
+                emgCalibrationError = "La captura EMG no produjo un valor válido."
+                return@launch
+            }
+
+            if (isRest) {
+                pendingEmgRestMv = capturedMv
+                emgCalibrationStage = EmgCalibrationStage.MAXIMUM_PROMPT
+            } else {
+                val restMv = pendingEmgRestMv
+                if (restMv == null || capturedMv <= restMv) {
+                    emgCalibrationStage = EmgCalibrationStage.MAXIMUM_PROMPT
+                    emgCalibrationError = "El esfuerzo máximo debe producir una señal mayor que la de reposo. Reintenta."
+                    return@launch
+                }
+
                 try {
-                    preferences.setEmgReferenceMaxMv(currentValue)
-                    emgReferenceSaveError = null
+                    userPreferencesRepository?.setEmgCalibration(restMv, capturedMv)
+                    emgSession = emgSession.copy(
+                        referenceRestMv = restMv,
+                        referenceMaxMv = capturedMv
+                    )
+                    emgMaximumAlertActive = true
+                    emgCalibrationStage = EmgCalibrationStage.COMPLETE
                 } catch (exception: IOException) {
-                    emgReferenceSaveError = "No se pudo guardar la referencia máxima: ${exception.localizedMessage}"
+                    emgCalibrationStage = EmgCalibrationStage.MAXIMUM_PROMPT
+                    emgCalibrationError =
+                        "No se pudo guardar la calibración EMG: ${exception.localizedMessage}"
                 }
             }
         }
-        return true
     }
 
     private fun buildPhysicalSensorsList(

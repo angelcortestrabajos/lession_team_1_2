@@ -17,18 +17,29 @@ data class EmgSession(
     val sampleValuesMv: List<Float> = emptyList(),
     val averageMv: Double? = null,
     val maxSessionMv: Float? = null,
+    val referenceRestMv: Float? = null,
     val referenceMaxMv: Float? = null,
     val lastTimestampMs: Long? = null
 ) {
     val performancePercent: Float?
-        get() = referenceMaxMv
-            ?.takeIf { it > 0f }
-            ?.let { reference ->
-                latestSample?.valueMv?.div(reference)?.times(100f)?.coerceIn(0f, 100f)
-            }
+        get() {
+            val rest = referenceRestMv ?: return null
+            val maximum = referenceMaxMv ?: return null
+            val current = latestSample?.valueMv ?: return null
+            if (!rest.isFinite() || !maximum.isFinite() || maximum <= rest) return null
+            return ((current - rest) / (maximum - rest) * 100f).coerceIn(0f, 100f)
+        }
+
+    val maximumEffortReached: Boolean
+        get() {
+            val maximum = referenceMaxMv ?: return false
+            val rest = referenceRestMv ?: return false
+            val current = latestSample?.valueMv ?: return false
+            return maximum.isFinite() && rest.isFinite() && maximum > rest && current >= maximum
+        }
 
     fun accept(sample: EmgSample): EmgSession {
-        if (sample.sensor != "emg_module" || sample.metric != "emgEnvelope" ||
+        if (sample.sensor != "emg_module" || sample.metric != "emgSignal" ||
             sample.status != "valid" || sample.unit != "mV" ||
             !sample.valueMv.isFinite() || sample.valueMv < 0f ||
             sample.adcRaw !in 0..4095 ||

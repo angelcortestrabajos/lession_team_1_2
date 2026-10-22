@@ -72,7 +72,7 @@ class LessionUnitTest {
 
     @Test
     fun emgSession_accumulatesRealMillivoltsAndCalculatesBoundedPerformance() {
-        val reference = EmgSession(referenceMaxMv = 1000f)
+        val reference = EmgSession(referenceRestMv = 0f, referenceMaxMv = 1000f)
         val session = reference
             .accept(emgSample(valueMv = 500f, timestampMs = 1L))
             .accept(emgSample(valueMv = 1200f, timestampMs = 2L))
@@ -112,7 +112,7 @@ class LessionUnitTest {
 
     @Test
     fun emgSession_zeroReferenceDoesNotDivideAndResetKeepsReference() {
-        val zeroReference = EmgSession(referenceMaxMv = 0f)
+        val zeroReference = EmgSession(referenceRestMv = 0f, referenceMaxMv = 0f)
             .accept(emgSample(valueMv = 0f, timestampMs = 1L))
         assertEquals(null, zeroReference.performancePercent)
 
@@ -121,6 +121,7 @@ class LessionUnitTest {
         assertEquals(0L, reset.sampleCount)
         assertTrue(reset.sampleValuesMv.isEmpty())
         assertEquals(null, reset.latestSample)
+        assertEquals(0f, reset.referenceRestMv!!)
         assertEquals(900f, reset.referenceMaxMv!!)
     }
 
@@ -189,10 +190,19 @@ class LessionUnitTest {
 
     @Test
     fun emgSession_calculatesPercentageFromSameMillivoltMetric() {
-        val session = EmgSession(referenceMaxMv = 1000f)
-            .accept(emgSample(valueMv = 250f, timestampMs = 1L))
+        val session = EmgSession(referenceRestMv = 100f, referenceMaxMv = 500f)
+            .accept(emgSample(valueMv = 300f, timestampMs = 1L))
 
-        assertEquals(25f, session.performancePercent!!, 0.001f)
+        assertEquals(50f, session.performancePercent!!, 0.001f)
+    }
+
+    @Test
+    fun emgSession_normalizesAgainstRestAndFlagsCalibratedMaximum() {
+        val session = EmgSession(referenceRestMv = 100f, referenceMaxMv = 500f)
+            .accept(emgSample(valueMv = 500f, timestampMs = 1L))
+
+        assertEquals(100f, session.performancePercent!!, 0.001f)
+        assertTrue(session.maximumEffortReached)
     }
 
     private fun emgSample(
@@ -202,7 +212,7 @@ class LessionUnitTest {
         sequence: Long = timestampMs
     ) = EmgSample(
         sensor = "emg_module",
-        metric = "emgEnvelope",
+        metric = "emgSignal",
         valueMv = valueMv,
         unit = "mV",
         adcRaw = adcRaw,

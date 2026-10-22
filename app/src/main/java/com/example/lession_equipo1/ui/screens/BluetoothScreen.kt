@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lession_equipo1.BiometricViewModel
+import com.example.lession_equipo1.EmgCalibrationStage
 import com.example.lession_equipo1.network.BluetoothState
 import com.example.lession_equipo1.network.DiscoveredBluetoothDevice
 import com.example.lession_equipo1.ui.LocalAppColors
@@ -46,12 +47,17 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
     val supportsEmg by viewModel.supportsEmgCommands.collectAsStateWithLifecycle()
     val commandError by viewModel.commandError.collectAsStateWithLifecycle()
     val colors = LocalAppColors.current
+    val calibrationStage = viewModel.emgCalibrationStage
 
     val context = LocalContext.current
 
     var isRedLedOn by remember { mutableStateOf(false) }
     var isBlueLedOn by remember { mutableStateOf(false) }
-    var isYellowLedOn by remember { mutableStateOf(false) }
+    var isGreenLedOn by remember { mutableStateOf(false) }
+
+    if (calibrationStage != EmgCalibrationStage.IDLE) {
+        EmgCalibrationDialog(viewModel)
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -160,19 +166,11 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
-                            onClick = {
-                                if (!viewModel.setEmgMaximumReference()) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Se necesita una muestra EMG real válida para fijar el máximo.",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            },
+                            onClick = { viewModel.beginEmgCalibration() },
                             enabled = state is BluetoothState.Connected && supportsEmg,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Máximo")
+                            Text("Calibrar")
                         }
                         Text(
                             "Muestras ${emgSession.sampleCount} · Promedio ${emgSession.averageMv?.let { "%.1f".format(it) } ?: "--"} mV",
@@ -187,12 +185,10 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
                         color = colors.text,
                         fontSize = 12.sp
                     )
-                    viewModel.emgReferenceSaveError?.let { error ->
-                        Text(error, color = Color.Red, fontSize = 12.sp)
-                    }
                     Text(
-                        "Referencia: ${emgSession.referenceMaxMv?.let { "%.1f".format(it) } ?: "--"} mV · " +
-                            "Rendimiento: ${emgSession.performancePercent?.let { "%.0f".format(it) } ?: "--"}%",
+                        "Reposo: ${emgSession.referenceRestMv?.let { "%.1f".format(it) } ?: "--"} mV · " +
+                            "Umbral máximo: ${emgSession.referenceMaxMv?.let { "%.1f".format(it) } ?: "--"} mV · " +
+                            "Esfuerzo: ${emgSession.performancePercent?.let { "%.0f".format(it) } ?: "--"}%",
                         color = colors.subText,
                         fontSize = 12.sp
                     )
@@ -315,13 +311,13 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
 
                                 OutlinedButton(
                                     onClick = {
-                                        isYellowLedOn = !isYellowLedOn
-                                        viewModel.sendEmgCommand(if (isYellowLedOn) "LED_YELLOW_ON" else "LED_YELLOW_OFF")
+                                        isGreenLedOn = !isGreenLedOn
+                                        viewModel.sendEmgCommand(if (isGreenLedOn) "LED_GREEN_ON" else "LED_GREEN_OFF")
                                     },
-                                    border = BorderStroke(1.dp, if (isYellowLedOn) Color.Yellow else colors.subText),
+                                    border = BorderStroke(1.dp, if (isGreenLedOn) Color.Green else colors.subText),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Amarillo", color = if (isYellowLedOn) Color.Yellow else colors.text, fontSize = 11.sp)
+                                    Text("Verde", color = if (isGreenLedOn) Color.Green else colors.text, fontSize = 11.sp)
                                 }
                             }
 
@@ -335,7 +331,7 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
                                     onClick = {
                                         isRedLedOn = false
                                         isBlueLedOn = false
-                                        isYellowLedOn = false
+                                        isGreenLedOn = false
                                         viewModel.sendEmgCommand("ALL_OFF")
                                     },
                                     modifier = Modifier.weight(1f)
@@ -347,7 +343,7 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
                                     onClick = {
                                         isRedLedOn = true
                                         isBlueLedOn = true
-                                        isYellowLedOn = true
+                                        isGreenLedOn = true
                                         viewModel.sendEmgCommand("ALL_ON")
                                     },
                                     modifier = Modifier.weight(1f)
@@ -514,6 +510,77 @@ fun BluetoothScreen(viewModel: BiometricViewModel, onBack: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun EmgCalibrationDialog(viewModel: BiometricViewModel) {
+    val stage = viewModel.emgCalibrationStage
+    val isCapturing = stage == EmgCalibrationStage.CAPTURING_REST ||
+        stage == EmgCalibrationStage.CAPTURING_MAXIMUM
+    val title = when (stage) {
+        EmgCalibrationStage.REST_PROMPT,
+        EmgCalibrationStage.CAPTURING_REST -> "Calibración · reposo"
+        EmgCalibrationStage.MAXIMUM_PROMPT,
+        EmgCalibrationStage.CAPTURING_MAXIMUM -> "Calibración · esfuerzo máximo"
+        EmgCalibrationStage.COMPLETE -> "Calibración guardada"
+        EmgCalibrationStage.IDLE -> return
+    }
+
+    AlertDialog(
+        onDismissRequest = { viewModel.closeEmgCalibration() },
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    when (stage) {
+                        EmgCalibrationStage.REST_PROMPT,
+                        EmgCalibrationStage.CAPTURING_REST ->
+                            "Mantén el músculo relajado. Se promediarán 20 muestras EMG."
+                        EmgCalibrationStage.MAXIMUM_PROMPT,
+                        EmgCalibrationStage.CAPTURING_MAXIMUM ->
+                            "Haz una contracción máxima controlada, sin dolor. Se promediarán 20 muestras."
+                        EmgCalibrationStage.COMPLETE ->
+                            "Reposo: ${viewModel.emgSession.referenceRestMv?.let { "%.1f".format(it) } ?: "--"} mV. " +
+                                "Umbral máximo: ${viewModel.emgSession.referenceMaxMv?.let { "%.1f".format(it) } ?: "--"} mV. " +
+                                "La alerta se activa al alcanzar ese valor; no es una evaluación clínica."
+                        EmgCalibrationStage.IDLE -> ""
+                    }
+                )
+                viewModel.emgCalibrationError?.let { error ->
+                    Text(error, color = Color.Red)
+                }
+                if (isCapturing) {
+                    CircularProgressIndicator()
+                }
+            }
+        },
+        confirmButton = {
+            when (stage) {
+                EmgCalibrationStage.REST_PROMPT ->
+                    Button(onClick = { viewModel.captureEmgRest() }) {
+                        Text("Capturar reposo")
+                    }
+                EmgCalibrationStage.MAXIMUM_PROMPT ->
+                    Button(onClick = { viewModel.captureEmgMaximum() }) {
+                        Text("Capturar máximo")
+                    }
+                EmgCalibrationStage.COMPLETE ->
+                    Button(onClick = { viewModel.closeEmgCalibration() }) {
+                        Text("Cerrar")
+                    }
+                EmgCalibrationStage.CAPTURING_REST,
+                EmgCalibrationStage.CAPTURING_MAXIMUM,
+                EmgCalibrationStage.IDLE -> Unit
+            }
+        },
+        dismissButton = {
+            if (!isCapturing && stage != EmgCalibrationStage.COMPLETE) {
+                TextButton(onClick = { viewModel.closeEmgCalibration() }) {
+                    Text("Cancelar")
+                }
+            }
+        }
+    )
 }
 
 @SuppressLint("MissingPermission")
