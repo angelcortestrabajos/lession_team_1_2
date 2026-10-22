@@ -22,7 +22,7 @@ constexpr bool kRgbCommonAnode = false;
 
 // Activar solo después de verificar que SIG siempre queda entre 0 y 3,3 V
 // respecto de GND. Esta opción no protege eléctricamente el pin ADC.
-constexpr bool kSigRangeVerified = false;
+constexpr bool kSigRangeVerified = true;
 
 constexpr uint32_t kSampleIntervalMs = 100;
 constexpr uint8_t kAdcSamplesPerReading = 8;
@@ -95,8 +95,7 @@ class ServerCallbacks final : public BLEServerCallbacks {
 
 class CharacteristicCallbacks final : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* characteristic) override {
-    std::string value = characteristic->getValue();
-    String command(value.c_str());
+    String command = characteristic->getValue();
     command.trim();
 
     if (command == "LED_RED_ON") {
