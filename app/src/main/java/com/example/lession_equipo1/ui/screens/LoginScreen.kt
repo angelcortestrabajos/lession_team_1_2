@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lession_equipo1.ui.CustomTextField
+import com.example.lession_equipo1.ui.LessionLogoGraphic
 import com.example.lession_equipo1.ui.LocalAppColors
 import com.example.lession_equipo1.ui.LocalStrings
 import com.example.lession_equipo1.viewmodel.AuthState
@@ -78,27 +79,7 @@ fun LoginScreen(
         ) {
             Spacer(modifier = Modifier.height(20.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .border(2.dp, if (colors.isDark) Color(0xFF00BFFF) else Color(0xFF1A1251), RoundedCornerShape(4.dp))
-                    .padding(8.dp)
-            ) {
-                Icon(
-                    Icons.Default.FitnessCenter,
-                    contentDescription = "Logo Lession",
-                    tint = colors.accent,
-                    modifier = Modifier.size(40.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "LESSION",
-                    color = colors.text,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Black,
-                    fontStyle = FontStyle.Italic
-                )
-            }
+            LessionLogoGraphic()
 
             Spacer(modifier = Modifier.height(30.dp))
 
