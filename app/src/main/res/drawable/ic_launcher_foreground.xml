@@ -3,23 +3,35 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Dumbbell / Fitness Symbol representing Lession -->
-    <!-- Handle -->
+
+    <!-- Shield Outline (Neon Yellow / Lime) -->
     <path
-        android:fillColor="#CCFF00"
-        android:pathData="M38,50 h32 v8 h-32 z" />
-    <!-- Left Weight Plates -->
+        android:fillColor="#00000000"
+        android:strokeColor="#CCFF00"
+        android:strokeWidth="5"
+        android:pathData="M32,24 L54,16 L76,24 V58 C76,74 54,88 54,88 C54,88 32,74 32,58 Z" />
+
+    <!-- ECG Waveform Signal (Right side inside shield) -->
     <path
-        android:fillColor="#00FFCC"
-        android:pathData="M26,36 h8 v36 h-8 z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#CCFF00"
+        android:strokeWidth="3.5"
+        android:pathData="M50,50 h5 l3,-12 l6,26 l5,-18 l3,4 h7" />
+
+    <!-- Running Shoe Silhouette (Left side inside shield) -->
     <path
-        android:fillColor="#CCFF00"
-        android:pathData="M20,42 h4 v24 h-4 z" />
-    <!-- Right Weight Plates -->
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,56 c3,1 8,3 12,5 c2,1 4,3 5,5 c1,2 1,4 0,6 c-1,1 -3,1 -5,0 c-3,-2 -6,-5 -9,-7 c-2,-2 -3,-3 -3,-4 z" />
+
+    <!-- Shoe Sole & Motion Dashes -->
     <path
-        android:fillColor="#00FFCC"
-        android:pathData="M74,36 h8 v36 h-8 z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M25,69 h18 c2,0 3,1 2,3 c-1,1 -3,2 -5,2 h-13 c-2,0 -2,-2 -2,-5 z" />
     <path
-        android:fillColor="#CCFF00"
-        android:pathData="M84,42 h4 v24 h-4 z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,75 h8 v2 h-8 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,75 h5 v2 h-5 z" />
+
 </vector>
